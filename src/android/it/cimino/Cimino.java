@@ -1,4 +1,4 @@
-package cordova.plugins;
+package it.cimino;
 
 import java.io.File;
 import java.io.IOException;
@@ -12,7 +12,6 @@ import org.apache.cordova.PluginResult;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.opencv.cameracalibration.CameraCalibrationActivity;
 
 import android.app.Activity;
 import android.content.Context;
@@ -34,6 +33,7 @@ public class Cimino extends CordovaPlugin {
 	
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
+    	Log.d("Cimino::Main", "executing  "+action);
         if (action.equals("calibrate")) 
         {
         	try
@@ -109,6 +109,10 @@ public class Cimino extends CordovaPlugin {
      */
     private void capture() 
     {
+    	
+        Context context = cordova.getActivity().getApplicationContext();
+        Intent intent = new Intent(context, CameraCaptureActivity.class);
+        cordova.startActivityForResult((CordovaPlugin) this, intent, 0 );
 
     }
     
@@ -121,9 +125,7 @@ public class Cimino extends CordovaPlugin {
      * @param intent            An Intent, which can return result data to the caller (various data can be attached to Intent "extras").
      */
     public void onActivityResult(int requestCode, int resultCode, Intent intent) {
-    	int i=0;
-    	i++;
-
+    	Log.d("Cimino::Main", "ActivityResult = requestCode:"+requestCode+" resultCode: "+resultCode);
     }    
     
 }
