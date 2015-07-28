@@ -2,26 +2,42 @@ package it.cimino;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
+
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewFrame;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
+import org.opencv.android.Utils;
 import org.opencv.core.Core;
+import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.Point;
+import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
+import org.opencv.highgui.Highgui;
 import org.opencv.imgproc.Imgproc;
+import org.opencv.utils.Converters;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2;
+
 import com.ionicframework.ciminoapp963035.R;
+
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.ProgressDialog;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
+import android.hardware.Camera;
+import android.hardware.Camera.AutoFocusCallback;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
-import android.os.Handler;
 import android.util.Log;
 //import android.view.Menu;
 //import android.view.MenuItem;
@@ -31,6 +47,7 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.View.OnTouchListener;
 import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.Toast;
 
 public class CameraCaptureActivity extends Activity implements CvCameraViewListener2, OnTouchListener {
@@ -44,7 +61,22 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
 //    private SubMenu mResolutionMenu;
     private int rows = 0;
     private int cols = 0;
-    private List<Point> corners = null;
+    private Point[] corners2f = new Point[4];
+    private Point[] corners2f_snap = new Point[4];
+    private Button button;
+    private ProgressDialog progressDialog;
+    @SuppressLint("SimpleDateFormat")
+	private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
+    private String currentDateandTime = "";
+    public AutoFocusCallback autofocusCallback;
+    
+	private byte[] imageHeader = null;
+
+    @SuppressWarnings("deprecation")
+	public CameraCaptureActivity() {
+        Log.i(TAG, "Instantiated new " + this.getClass());   
+   
+    }
     
     private Point computeIntersect(double[] a, double[] b)
     {
@@ -113,32 +145,83 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
         }
     };
 
-    public CameraCaptureActivity() {
-        Log.i(TAG, "Instantiated new " + this.getClass());
-    }
-
     /** Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState) {
         Log.i(TAG, "called onCreate");
         super.onCreate(savedInstanceState);
+        
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         setContentView(R.layout.camera_capture_surface_view);
-
-        mOpenCvCameraView = (MyJavaCameraView) findViewById(R.id.camera_capture_activity_java_surface_view);
-
+        autofocusCallback = new AutoFocusCallback()
+		{			
+			@Override
+			public void onAutoFocus(boolean success, Camera camera)
+			{
+				// TODO Auto-generated method stub
+				// 1 devo emettere un suono
+				// 2 devo impostare il flag di attivazione pulsante a true
+				if (success) Log.d(TAG, "Focus success");
+				
+			}
+		};     
+        mOpenCvCameraView = (MyJavaCameraView) findViewById(R.id.camera_capture_activity_java_surface_view);        
         mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
         mOpenCvCameraView.setCvCameraViewListener(this);
         mOpenCvCameraView.disableFpsMeter();
+        mOpenCvCameraView.initParent(CameraCaptureActivity.this);
+        
+        button = (Button) findViewById(R.id.button1);
+        button.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+            	corners2f_snap = corners2f;
+            	if (corners2f_snap.length==4)
+            	{
+        			Log.d(TAG,"###### new ProgressDialog");
+        			progressDialog = new ProgressDialog(CameraCaptureActivity.this);
+        			progressDialog.setMessage("Attendere, elaboraizone in corso...");
+        			progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+        			progressDialog.setProgress(0);  	    	
+        			progressDialog.setMax(100);        
+        			Log.d(TAG,"###### progressDialog.show()");
+          	    	progressDialog.show();           	    
+          	    	
+                	currentDateandTime = sdf.format(new Date());
+        		    String fileName = Environment.getExternalStorageDirectory().getPath() +
+        		                           "/sample_picture_" + currentDateandTime + ".jpg";
+
+        			Log.d(TAG,"###### mOpenCvCameraView.takePicture start");
+        			mOpenCvCameraView.takePicture(fileName);
+        			Log.d(TAG,"###### mOpenCvCameraView.takePicture end");
+        			
+
+
+            	}
+            	else
+            	{
+            		Toast.makeText(CameraCaptureActivity.this, "Non hai inquadrato bene il documento, riprova...", Toast.LENGTH_SHORT).show();
+            	}
+            }
+        });
     }
 
+    public void doBackgroundTask()
+    {
+		Log.d(TAG,"###### IAmABackgroundTask().execute() start");
+    	new IAmABackgroundTask().execute();
+    	Log.d(TAG,"###### IAmABackgroundTask().execute() end");
+    }
+    
     @Override
     public void onPause()
     {
         super.onPause();
         if (mOpenCvCameraView != null)
         {
+        	if ( progressDialog!=null && progressDialog.isShowing() ){
+                progressDialog.dismiss();
+            }
             mOpenCvCameraView.disableView();
         }
     }
@@ -159,11 +242,15 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
     public void onDestroy() {
         super.onDestroy();
         if (mOpenCvCameraView != null)
+        	if ( progressDialog!=null && progressDialog.isShowing() ){
+                progressDialog.dismiss();
+            }
         	mOpenCvCameraView.FlashlightOFF();
             mOpenCvCameraView.disableView();
     }
 
     public void onCameraViewStarted(int width, int height) {
+        mOpenCvCameraView.setDefaultParameters();    	
     }
 
     public void onCameraViewStopped() {
@@ -224,6 +311,10 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
         		
         }
    */
+        Core.circle(mRgbaT, new Point(0,0), 100, new Scalar(127,127,0));
+        Core.circle(mRgbaT, new Point(cols,0), 100, new Scalar(127,127,0));
+        Core.circle(mRgbaT, new Point(0,rows), 100, new Scalar(127,127,0));
+        Core.circle(mRgbaT, new Point(cols,rows), 100, new Scalar(127,127,0));
         
         //Log.d(TAG,"Lines: "+(lines.cols()));
         if (lines.cols()>0)
@@ -252,7 +343,6 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
 
             }
             
-            corners = new ArrayList<Point>();
             Point corner00 = new Point();
             Point cornerX0 = new Point();
             Point corner0Y = new Point();
@@ -262,11 +352,6 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
             int countX0 = 0;
             int count0Y = 0;
             int countXY = 0;
-            
-            Core.circle(mRgbaT, new Point(0,0), 100, new Scalar(127,127,0));
-            Core.circle(mRgbaT, new Point(cols,0), 100, new Scalar(127,127,0));
-            Core.circle(mRgbaT, new Point(0,rows), 100, new Scalar(127,127,0));
-            Core.circle(mRgbaT, new Point(cols,rows), 100, new Scalar(127,127,0));
             
             for (int i = 0; i < lines.cols(); i++)
             {
@@ -307,41 +392,50 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
                     }
                 }
             }
+            List<Point> corners = new ArrayList<Point>();            
             if (count00>0) 
         	{
             	corner00.x /= count00;  
             	corner00.y /= count00;  
                 corners.add(corner00);
-            	Core.circle(mRgbaT, corner00, 15, new Scalar(0,0,255));
+            	Core.circle(mRgbaT, corner00, 20, new Scalar(0,0,255));
         	}
             if (countX0>0)
             {
             	cornerX0.x /= countX0;
             	cornerX0.y /= countX0;
             	corners.add(cornerX0);
-            	Core.circle(mRgbaT, cornerX0, 15, new Scalar(0,0,255));
+            	Core.circle(mRgbaT, cornerX0, 20, new Scalar(0,0,255));
             }
             if (countXY>0) 
             {
             	cornerXY.x /= countXY;
             	cornerXY.y /= countXY;
             	corners.add(cornerXY);
-            	Core.circle(mRgbaT, cornerXY, 15, new Scalar(0,0,255));
+            	Core.circle(mRgbaT, cornerXY, 20, new Scalar(0,0,255));
             }
             if (count0Y>0) 
             {
             	corner0Y.x /= count0Y;  
             	corner0Y.y /= count0Y;  
             	corners.add(corner0Y);
-            	Core.circle(mRgbaT, corner0Y, 15, new Scalar(0,0,255));
+            	Core.circle(mRgbaT, corner0Y, 20, new Scalar(0,0,255));
             }
             
-            Point[] corners2f = (Point[]) corners.toArray(new Point[corners.size()]);
+            corners2f = (Point[]) corners.toArray(new Point[corners.size()]);
 
-            Log.d(TAG,"corners found: "+(corners2f.length));
+            //Log.d(TAG,"corners found: "+(corners2f.length));
             if (corners2f.length==4)
             {
-            	Core.line(mRgbaT, corners2f[0], corners2f[1], new Scalar(255,255,0), 3);
+            	runOnUiThread(new Runnable() {
+	           	     @Override
+	           	     public void run() {
+	
+	           	    	 button.requestFocus();
+	           	    	 button.setVisibility(Button.VISIBLE);
+	           	    }
+	           	});
+	            	Core.line(mRgbaT, corners2f[0], corners2f[1], new Scalar(255,255,0), 3);
             	Core.line(mRgbaT, corners2f[1], corners2f[2], new Scalar(255,255,0), 3);
             	Core.line(mRgbaT, corners2f[2], corners2f[3], new Scalar(255,255,0), 3);
             	Core.line(mRgbaT, corners2f[3], corners2f[0], new Scalar(255,255,0), 3);
@@ -375,15 +469,27 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
                 	Core.circle(mRgbaT, sorted_corners[1], 5, new Scalar(255,255,0));
                 	Core.circle(mRgbaT, sorted_corners[2], 5, new Scalar(255,255,0));
                 	Core.circle(mRgbaT, sorted_corners[3], 5, new Scalar(255,255,0));
-*/
+
                 }
+*/            	
+            }
+            else
+            {
+            	runOnUiThread(new Runnable() {
+	          	    @Override
+	           	    public void run() {
+	          	    	button.requestFocus();
+	                 	button.setVisibility(Button.INVISIBLE);
+	           	    }
+            	});
             	
-//            }
+            }
             
         }
     	return mRgbaT;
     }
 
+    
     /*
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -442,35 +548,155 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
         return true;
     }
 */
-    @SuppressLint({"ClickableViewAccessibility", "ShowToast", "SimpleDateFormat" })
-    @Override
+    @SuppressLint("ClickableViewAccessibility")
+	@Override
     public boolean onTouch(View v, MotionEvent event) {
         Log.i(TAG,"onTouch event");
-        try
-		{
-			if (corners.size()==4)
-			{
-				// qui attivo una "clessidra" e aspetto che la foto raddrizzata sia pronta
-				SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
-			    String currentDateandTime = sdf.format(new Date());
-			    String fileName = Environment.getExternalStorageDirectory().getPath() +
-			                           "/sample_picture_" + currentDateandTime + ".jpg";
-			    mOpenCvCameraView.takePicture(fileName, corners);
-				Thread.sleep(2000);
-				this.finish();
-			}
-			else
-			{
-				Toast.makeText(this, "Non hai inquadrato bene il documento, riprova", Toast.LENGTH_SHORT).show();
-			}
-		}
-		catch (Exception e)
-		{
-			Toast.makeText(this, "Non hai inquadrato bene il documento, riprova", Toast.LENGTH_SHORT).show();
-		}
+        // posso usare il touch per aggiustare il FOCUS
+        if (event.getAction() == MotionEvent.ACTION_DOWN)
+        {
+            float x = event.getX();
+            float y = event.getY();
+            float touchMajor = event.getTouchMajor();
+            float touchMinor = event.getTouchMinor();
+
+            android.graphics.Rect touchRect = new android.graphics.Rect((int)(x - touchMajor / 2), (int)(y - touchMinor / 2), (int)(x + touchMajor / 2), (int)(y + touchMinor / 2));
+
+            mOpenCvCameraView.submitFocusAreaRect(touchRect);
+        }        
         return false;
     }
     
-    
+    class IAmABackgroundTask extends AsyncTask<String, Integer, Boolean> {
+    	
+    	public int safeLongToInt(long l) {
+    	    if (l < Integer.MIN_VALUE || l > Integer.MAX_VALUE) {
+    	        throw new IllegalArgumentException
+    	            (l + " cannot be cast to int without changing its value.");
+    	    }
+    	    return (int) l;
+    	}
+    	
+		@Override
+		protected void onPreExecute() {
+		    Log.d(TAG,"###### IAmABackgroundTask.onPreExecute");
+			button.requestFocus();
+			button.setEnabled(false);
+		}
+		
+		@Override
+		protected void onPostExecute(Boolean result) {
+			Log.d(TAG,"###### IAmABackgroundTask.onPostExecute");
+			button.requestFocus();
+			button.setEnabled(true);
+
+		    if (CameraCaptureActivity.this != null) {
+	        	if ( progressDialog!=null && progressDialog.isShowing() ){
+	                progressDialog.dismiss();
+	                CameraCaptureActivity.this.finish();
+	            }
+	    	}
+		
+		}
+		
+		@SuppressLint("SimpleDateFormat")
+		@Override
+		protected Boolean doInBackground(String... params) {
+			Log.d(TAG,"###### IAmABackgroundTask.doInBackground");
+        	mOpenCvCameraView.FlashlightOFF();
+            mOpenCvCameraView.disableView();	                
+
+            Log.d(TAG,"###### waiting for mOpenCvCameraView.getData()!=null");
+			while (mOpenCvCameraView.getData()==null){
+            	try
+				{
+					Thread.sleep(1000);
+				}
+				catch (InterruptedException e)
+				{
+					e.printStackTrace();
+				}
+            }
+
+			Log.d(TAG,"###### progressDialog.setProgress");
+		    progressDialog.setProgress(10);
+            byte[] data = mOpenCvCameraView.getData();
+        	try
+			{
+				Thread.sleep(1000);
+			}
+			catch (InterruptedException e)
+			{
+				e.printStackTrace();
+			}
+            Bitmap inputBitmap = BitmapFactory.decodeByteArray(data,0,data.length);
+            // 1) devo ruotare la bitmap di 90 gradi in senso orario
+            // l'immagine è 3246x2448
+            // deve diventare 2448x3246
+            Matrix matrix = new Matrix();
+            matrix.setRotate(90, 0, 0);
+            Bitmap rotatedBitmap = Bitmap.createBitmap(inputBitmap , 0, 0, inputBitmap.getWidth(), inputBitmap.getHeight(), matrix, true);
+            inputBitmap.recycle();
+            inputBitmap=null;
+            progressDialog.setProgress(20);
+            // 1) devo scalare la posizione dei punti
+            List<Point> corners = new ArrayList<Point>(Arrays.asList(corners2f_snap));            
+            Iterator<Point> it = corners.iterator();
+            while (it.hasNext())
+            {
+            	Point pt = it.next();
+            	pt.x = pt.x*2448/480;
+            	pt.y = pt.y*3246/800;
+            }
+            
+            Mat inputMat = new Mat(rotatedBitmap.getHeight(), rotatedBitmap.getWidth(), CvType.CV_8UC3);
+            Utils.bitmapToMat(rotatedBitmap, inputMat);
+            progressDialog.setProgress(30);
+        	Mat quad = new Mat(rotatedBitmap.getHeight(), rotatedBitmap.getWidth(), CvType.CV_8UC3);    	
+        	rotatedBitmap.recycle();
+        	rotatedBitmap=null;
+        	Mat src_mat = Converters.vector_Point_to_Mat(corners,CvType.CV_32F);
+        	progressDialog.setProgress(40);
+        	// Corners of the destination image
+        	List<Point> quad_pts = new ArrayList<Point>();
+        	quad_pts.add(new Point(0, 0));
+        	quad_pts.add(new Point(quad.cols(), 0));
+        	quad_pts.add(new Point(quad.cols(), quad.rows()));
+        	quad_pts.add(new Point(0, quad.rows()));
+        	Mat dst_mat = Converters.vector_Point_to_Mat(quad_pts,CvType.CV_32F);
+        	progressDialog.setProgress(50);
+
+        	// Get transformation matrix               	
+        	Mat transmtx = Imgproc.getPerspectiveTransform(src_mat, dst_mat);
+        	progressDialog.setProgress(60);
+        	// Apply perspective transformation
+        	Imgproc.warpPerspective(inputMat, quad, transmtx, quad.size());
+            // Write the image in a file (in jpeg format)
+            progressDialog.setProgress(70);
+            String imageFile = Environment.getExternalStorageDirectory().getPath()+"/resultImage_"+currentDateandTime+".jpg";
+        	Highgui.imwrite(imageFile, quad);
+        	progressDialog.setProgress(80);
+        	        	
+        	Rect roi = new Rect(0,0,quad.width(),(int)(quad.height()*0.2));
+        	Mat cropped = new Mat(quad,roi);
+        	imageHeader = new byte[(int) cropped.total()];
+        	String headerFile = Environment.getExternalStorageDirectory().getPath()+"/resultHeader_"+currentDateandTime+".jpg";
+        	Highgui.imwrite(headerFile, cropped);
+        	progressDialog.setProgress(90);
+        	
+            Log.d(TAG,"Image size: "+mOpenCvCameraView.getData().length+" - cropped size:"+imageHeader.length);
+        	Intent resultIntent = new Intent();
+        	resultIntent.putExtra("imageFile", imageFile);
+        	resultIntent.putExtra("headerFile", headerFile);
+        	setResult(RESULT_OK, resultIntent);                	
+        	
+        	progressDialog.setProgress(100);
+			Log.d(TAG,"###### doInBackground finish");
+        	return true;
+		
+		}
+																																																									
+	}
+        
 } 
 

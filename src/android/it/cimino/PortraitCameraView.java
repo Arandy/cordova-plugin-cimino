@@ -20,6 +20,9 @@ import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Display;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.ViewGroup.LayoutParams;
 
@@ -38,6 +41,71 @@ protected Camera mCamera;
 protected JavaCameraFrame[] mCameraFrame;
 private SurfaceTexture mSurfaceTexture;
 private int mCameraId;
+public Preview mPreview;
+
+protected class Preview extends ViewGroup implements SurfaceHolder.Callback {
+
+    SurfaceView mSurfaceView;
+    SurfaceHolder mHolder;
+
+    Preview(Context context) {
+        super(context);
+
+        mSurfaceView = new SurfaceView(context);
+        addView(mSurfaceView);
+
+        // Install a SurfaceHolder.Callback so we get notified when the
+        // underlying surface is created and destroyed.
+        mHolder = mSurfaceView.getHolder();
+        mHolder.addCallback(this);
+        mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
+    }
+
+	@Override
+	public void surfaceCreated(SurfaceHolder holder)
+	{
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void surfaceChanged(SurfaceHolder holder, int format, int width, int height)
+	{
+		// Now that the size is known, set up the camera parameters and begin
+	    // the preview.
+	    Camera.Parameters parameters = mCamera.getParameters();
+		List<Camera.Size> sizes = parameters.getSupportedPreviewSizes();
+	    parameters.setPreviewFormat(ImageFormat.NV21);
+
+	    Size frameSize = calculateCameraFrameSize(sizes, new JavaCameraSizeAccessor(), height, width); //use turn around values here to get the correct prev size for portrait mode
+
+        Log.d(TAG, "Set preview size to " + Integer.valueOf((int)frameSize.width) + "x" + Integer.valueOf((int)frameSize.height));
+        parameters.setPreviewSize((int)frameSize.width, (int)frameSize.height);
+        
+	    requestLayout();
+	    mCamera.setParameters(parameters);
+
+	    // Important: Call startPreview() to start updating the preview surface.
+	    // Preview must be started before you can take a picture.
+	    mCamera.startPreview();
+		
+	}
+
+	@Override
+	public void surfaceDestroyed(SurfaceHolder holder)
+	{
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	protected void onLayout(boolean changed, int l, int t, int r, int b)
+	{
+		// TODO Auto-generated method stub
+		
+	}
+
+}
 
 public static class JavaCameraSizeAccessor implements ListItemAccessor {
 
@@ -109,7 +177,8 @@ protected boolean initializeCamera(int width, int height) {
     boolean result = true;
     synchronized (this) {
         mCamera = null;
-
+        mPreview = new Preview(this.getContext());
+        
         boolean connected = false;
         int numberOfCameras = android.hardware.Camera.getNumberOfCameras();
         android.hardware.Camera.CameraInfo cameraInfo = new android.hardware.Camera.CameraInfo();
@@ -147,9 +216,20 @@ protected boolean initializeCamera(int width, int height) {
                     params.setRecordingHint(true);
 
                 List<String> FocusModes = params.getSupportedFocusModes();
-                if (FocusModes != null && FocusModes.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO))
-                {
-                    params.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO);
+                if (FocusModes != null)
+              	{
+                	/*if (FocusModes.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE))
+                	{
+                        params.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE);
+                	}                
+                	else if (FocusModes.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO))
+	                {
+                        params.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO);
+	                }
+                	else
+                	{*/
+                		params.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
+                	//}
                 }
 
                 WindowManager wm = (WindowManager) this.getContext().getSystemService(Context.WINDOW_SERVICE);
@@ -164,7 +244,6 @@ protected boolean initializeCamera(int width, int height) {
                 mCamera.setParameters(params);
                 params = mCamera.getParameters();
                 params.setFlashMode(Parameters.FLASH_MODE_TORCH);
-                params.setFocusMode(Camera.Parameters.FOCUS_MODE_MACRO); // FOCUS_MODE_CONTINUOUS_PICTURE
                 Camera.Size optimalSize = getTopResolution(params.getSupportedPictureSizes(), width, height, rotation);
                 params.setPictureSize(optimalSize.width,optimalSize.height);
                 mCamera.setParameters(params);
@@ -205,8 +284,10 @@ protected boolean initializeCamera(int width, int height) {
                     mSurfaceTexture = new SurfaceTexture(MAGIC_TEXTURE_ID);
                     mCamera.setPreviewTexture(mSurfaceTexture);
                 } else
-                   mCamera.setPreviewDisplay(null);
-
+                {
+                	requestLayout();
+                	mCamera.setPreviewDisplay(mPreview.mHolder);
+                }
                 /* Finally we are ready to start the preview */
                 Log.d(TAG, "startPreview");
                 mCamera.startPreview();
