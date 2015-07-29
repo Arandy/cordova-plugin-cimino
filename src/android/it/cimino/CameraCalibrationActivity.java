@@ -20,13 +20,8 @@ import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Mat;
-
 import com.ionicframework.ciminoapp963035.R;
-import com.ionicframework.ciminoapp963035.R.id;
-import com.ionicframework.ciminoapp963035.R.layout;
-import com.ionicframework.ciminoapp963035.R.menu;
-import com.ionicframework.ciminoapp963035.R.string;
-
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.res.Resources;
@@ -42,6 +37,7 @@ import android.view.View.OnTouchListener;
 import android.view.WindowManager;
 import android.widget.Toast;
 
+@SuppressLint("ClickableViewAccessibility")
 public class CameraCalibrationActivity extends Activity implements CvCameraViewListener2, OnTouchListener {
     private static final String TAG = "Cimino::CameraCalibration";
 

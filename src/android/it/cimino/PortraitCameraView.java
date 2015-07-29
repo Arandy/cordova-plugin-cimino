@@ -26,6 +26,7 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.ViewGroup.LayoutParams;
 
+@SuppressWarnings("deprecation")
 public class PortraitCameraView extends CameraBridgeViewBase implements PreviewCallback {
 
 private static final int MAGIC_TEXTURE_ID = 10;
@@ -62,13 +63,6 @@ protected class Preview extends ViewGroup implements SurfaceHolder.Callback {
     }
 
 	@Override
-	public void surfaceCreated(SurfaceHolder holder)
-	{
-		// TODO Auto-generated method stub
-		
-	}
-
-	@Override
 	public void surfaceChanged(SurfaceHolder holder, int format, int width, int height)
 	{
 		// Now that the size is known, set up the camera parameters and begin
@@ -88,6 +82,13 @@ protected class Preview extends ViewGroup implements SurfaceHolder.Callback {
 	    // Important: Call startPreview() to start updating the preview surface.
 	    // Preview must be started before you can take a picture.
 	    mCamera.startPreview();
+		
+	}
+
+	@Override
+	public void surfaceCreated(SurfaceHolder holder)
+	{
+		// TODO Auto-generated method stub
 		
 	}
 

@@ -50,6 +50,7 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.Toast;
 
+@SuppressWarnings("deprecation")
 public class CameraCaptureActivity extends Activity implements CvCameraViewListener2, OnTouchListener {
     private static final String TAG = "Cimino::CameraCapture";
 
@@ -68,12 +69,12 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
     @SuppressLint("SimpleDateFormat")
 	private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
     private String currentDateandTime = "";
+    private String currentFileName  = "";
     public AutoFocusCallback autofocusCallback;
     
 	private byte[] imageHeader = null;
 
-    @SuppressWarnings("deprecation")
-	public CameraCaptureActivity() {
+    public CameraCaptureActivity() {
         Log.i(TAG, "Instantiated new " + this.getClass());   
    
     }
@@ -159,7 +160,6 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
 			@Override
 			public void onAutoFocus(boolean success, Camera camera)
 			{
-				// TODO Auto-generated method stub
 				// 1 devo emettere un suono
 				// 2 devo impostare il flag di attivazione pulsante a true
 				if (success) Log.d(TAG, "Focus success");
@@ -188,11 +188,11 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
           	    	progressDialog.show();           	    
           	    	
                 	currentDateandTime = sdf.format(new Date());
-        		    String fileName = Environment.getExternalStorageDirectory().getPath() +
+                	currentFileName = Environment.getExternalStorageDirectory().getPath() +
         		                           "/sample_picture_" + currentDateandTime + ".jpg";
 
         			Log.d(TAG,"###### mOpenCvCameraView.takePicture start");
-        			mOpenCvCameraView.takePicture(fileName);
+        			mOpenCvCameraView.takePicture(currentFileName);
         			Log.d(TAG,"###### mOpenCvCameraView.takePicture end");
         			
 
@@ -567,6 +567,11 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
         return false;
     }
     
+    /*
+     * 			
+			
+     * */
+    
     class IAmABackgroundTask extends AsyncTask<String, Integer, Boolean> {
     	
     	public int safeLongToInt(long l) {
@@ -692,11 +697,10 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
         	
         	progressDialog.setProgress(100);
 			Log.d(TAG,"###### doInBackground finish");
-        	return true;
+	
+			return true;
 		
-		}
-																																																									
-	}
-        
+		}																																																								
+	} 
 } 
 

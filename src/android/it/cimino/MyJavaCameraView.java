@@ -1,38 +1,20 @@
 package it.cimino;
 
 import java.io.FileOutputStream;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
-import java.util.Iterator;
 import java.util.List;
 
-import org.opencv.android.Utils;
-import org.opencv.core.CvType;
-import org.opencv.core.Mat;
-import org.opencv.core.Point;
-//import org.opencv.core.Rect;
-import org.opencv.highgui.Highgui;
-import org.opencv.imgproc.Imgproc;
-import org.opencv.utils.Converters;
-
 import android.annotation.SuppressLint;
-import android.app.ProgressDialog;
 import android.content.Context;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.hardware.Camera;
-import android.hardware.Camera.Area;
 import android.hardware.Camera.Parameters;
 import android.hardware.Camera.PictureCallback;
 import android.hardware.Camera.Size;
-import android.os.Environment;
 import android.util.AttributeSet;
 import android.util.Log;
-import android.view.SurfaceView;
 
+@SuppressWarnings("deprecation")
 public class MyJavaCameraView extends PortraitCameraView implements PictureCallback {
 
     private static final String TAG = "Cimino::MyJavaCameraView";
@@ -44,8 +26,7 @@ public class MyJavaCameraView extends PortraitCameraView implements PictureCallb
         super(context, attrs);        
     }
     
-    @SuppressWarnings("deprecation")
-	public void setDefaultParameters()
+    public void setDefaultParameters()
     {
     	mCamera.enableShutterSound(true);
     	
@@ -66,7 +47,7 @@ public class MyJavaCameraView extends PortraitCameraView implements PictureCallb
     		mCamera.getParameters().setAutoWhiteBalanceLock(true);
     	}
     	*/
-    	mCamera.getParameters().setSceneMode(mCamera.getParameters().SCENE_MODE_BARCODE);
+    	mCamera.getParameters().setSceneMode(Camera.Parameters.SCENE_MODE_BARCODE);
     }
     
     public List<String> getEffectList() {
@@ -117,13 +98,6 @@ public class MyJavaCameraView extends PortraitCameraView implements PictureCallb
 
         // PictureCallback is implemented by the current class
         mCamera.takePicture(null, null, this);
-    }
-    
-    private void autoFocus() {
-        // Initiate autofocus only when preview is started and snapshot is not
-        // in progress.
-            Log.v(TAG, "Start autofocus.");
-            //mCamera.autoFocus(mAutoFocusCallback);
     }
     
     public void FlashlightON()
