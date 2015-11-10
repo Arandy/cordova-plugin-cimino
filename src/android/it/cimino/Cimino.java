@@ -1,49 +1,62 @@
 package it.cimino;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.text.Normalizer;
+import java.text.Normalizer.Form;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaPlugin;
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaWebView;
-import org.apache.cordova.LOG;
-import org.apache.cordova.PluginResult;
 import org.apache.cordova.camera.FileHelper;
+import org.apache.cordova.PluginResult;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.opencv.android.OpenCVLoader;
 
 import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Matrix;
 import android.net.Uri;
 import android.os.Environment;
 import android.provider.MediaStore;
-import android.util.Base64;
 import android.util.Log;
-
 
 /**
  * This class echoes a string called from JavaScript.
  */
 public class Cimino extends CordovaPlugin {
 
-    private static final int DATA_URL = 0;              // Return base64 encoded string
+	private static final int DATA_URL = 0;              // Return base64 encoded string
     private static final int FILE_URI = 1;              // Return file uri (content://media/external/images/media/2 for Android)
 
     private static final int JPEG = 0;                  // Take a picture of type JPEG
     private static final int PNG = 1;                   // Take a picture of type PNG
 
-    private int targetWidth = 0;                // desired width of the image
-    private int targetHeight = 0;               // desired height of the image
+    //private int targetWidth = 0;                // desired width of the image
+    //private int targetHeight = 0;               // desired height of the image
+
+    private static final Pattern NONLATIN = Pattern.compile("[^\\w-]");
+    private static final Pattern WHITESPACE = Pattern.compile("[\\s]");
+
+    public static String toSlug(String input) {
+      String nowhitespace = WHITESPACE.matcher(input).replaceAll("-");
+      String normalized = Normalizer.normalize(nowhitespace, Form.NFD);
+      String slug = NONLATIN.matcher(normalized).replaceAll("");
+      slug.replace("0", "O").replace('1','I').replace("2", "Z").replace("3", "B").replace("4", "A").replace("5", "S");
+      return slug.toLowerCase(Locale.ITALIAN);
+    }    
     
-    private Uri imageUri;                   // Uri of captured image
+	private Uri imageUri;                   // Uri of captured image
     private static final String TAG = "Cimino::Main";
 
     private int encodingType = JPEG;               // Type of encoding to use
@@ -54,36 +67,147 @@ public class Cimino extends CordovaPlugin {
 	public void initialize(CordovaInterface cordova, CordovaWebView webView) {
 	    super.initialize(cordova, webView);
 	    // your init code here
+
+	    if (!OpenCVLoader.initDebug()) {
+            Log.d(TAG, "Internal OpenCV library not found. Using OpenCV Manager for initialization");
+            Context context = cordova.getActivity().getApplicationContext();
+            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_0_0, context, null);
+                        
+        } else {
+            Log.d(TAG, "OpenCV library found inside package. Using it!");
+        }
+	    
 	}
 	
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
     	Log.d(TAG, "executing  "+action);
+    	Log.d(TAG, "args:"+args.toString());
     	this.callbackContext = callbackContext;
-        if (action.equals("calibrate")) 
+        if(action.equals("capture"))
         {
         	try
         	{
-            	this.calibrate();
+            	this.capture(args.getJSONObject(0));
     	    }
     	    catch (IllegalArgumentException e)
     	    {
     	        callbackContext.error("Illegal Argument Exception");
+    	        e.printStackTrace();
     	        PluginResult r = new PluginResult(PluginResult.Status.ERROR);
     	        callbackContext.sendPluginResult(r);
-    	    }
-    	     
-    	    PluginResult r = new PluginResult(PluginResult.Status.NO_RESULT);
-    	    r.setKeepCallback(true);
-    	    callbackContext.sendPluginResult(r);
-	        return true;
+    	    }        	
+            return true;
         }
-        if(action.equals("capture"))
+        if(action.equals("process"))
         {
-            //this.encodingType = args.getInt(0);
         	try
         	{
-            	this.capture();
+            	this.process(args.getJSONObject(0));
+    	    }
+    	    catch (IllegalArgumentException e)
+    	    {
+    	        callbackContext.error("Illegal Argument Exception");
+    	        e.printStackTrace();
+    	        PluginResult r = new PluginResult(PluginResult.Status.ERROR);
+    	        callbackContext.sendPluginResult(r);
+    	    }        	
+            return true;
+        }
+        if (action.equals("init"))
+        {
+//        	InputStream input = null;
+//            OutputStream output = null;
+            HttpURLConnection connection = null;
+        	try
+        	{
+        		JSONObject arg_object = args.getJSONObject(0);
+                String tessdata_url = (String) arg_object.get("tessdata_url");
+                // qui posso caricare da internet il file ita.traineddata e memorizzarlo su
+                // getFileDirectoryPath()+"/tessdata
+                // se la cartella tessdata non e' repsente la devo creare
+        	    // se il file tessdata.ita non esiste lo devo scaricare da un URL.
+        	    String tessdatafilepath = getFileDirectoryPath()+"/tessdata";
+        	    String tessdatafilename = "ita.traineddata";
+        	    File file = new File(tessdatafilepath,tessdatafilename);
+        	    if(!file.exists()) 
+        	    {
+        	    	File dir = new File(tessdatafilepath);
+        	    	dir.mkdir();
+        	    	try{
+            	    	URL url = new URL(tessdata_url);
+                        connection = (HttpURLConnection) url.openConnection();
+                        connection.setRequestMethod("GET");
+                        connection.connect();
+                        
+                        // expect HTTP 200 OK, so we don't mistakenly save error report
+                        // instead of the file
+                        if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
+                	        callbackContext.error("Server returned HTTP " + connection.getResponseCode() + " " + connection.getResponseMessage());
+                	        PluginResult r = new PluginResult(PluginResult.Status.ERROR);
+                	        callbackContext.sendPluginResult(r);
+                	        return false;
+                            
+                        }
+                        else
+                        {
+
+                            // this will be useful to display download percentage
+                            // might be -1: server did not report the length
+                            int fileLength = connection.getContentLength();
+                            if (fileLength>0)
+                            {
+	                            FileOutputStream fileOutput = new FileOutputStream(file);
+	
+	                    		//Stream used for reading the data from the internet
+	                    		InputStream inputStream = connection.getInputStream();
+	                    		
+	                    		//create a buffer...
+	                    		byte[] buffer = new byte[1024];
+	                    		int bufferLength = 0;
+	
+	                    		while ( (bufferLength = inputStream.read(buffer)) > 0 ) {
+	                    			fileOutput.write(buffer, 0, bufferLength);
+	                    			// update the progressbar //
+	                    		}
+	                    		//close the output stream when complete //
+	                    		fileOutput.close();
+                            }
+                            else
+                            {
+                    	        callbackContext.error("File is empty!");
+                    	        PluginResult r = new PluginResult(PluginResult.Status.ERROR);
+                    	        callbackContext.sendPluginResult(r);
+                    	        return false;
+                            	
+                            }
+                        }
+        	    		
+        	    	} catch (final MalformedURLException e) {
+        	    		e.printStackTrace();
+            	        callbackContext.error("Error : MalformedURLException " + e);
+            	        PluginResult r = new PluginResult(PluginResult.Status.ERROR);
+            	        callbackContext.sendPluginResult(r);
+            	        return false;        		    	
+        	    	} catch (final IOException e) {
+        	    		e.printStackTrace();
+            	        callbackContext.error( "Error : IOException " + e);
+            	        PluginResult r = new PluginResult(PluginResult.Status.ERROR);
+            	        callbackContext.sendPluginResult(r);
+            	        return false;        		    	
+        	    	}
+        	    	catch (final Exception e) {
+        	    		e.printStackTrace();
+            	        callbackContext.error( "Error : Please check your internet connection " + e);
+            	        PluginResult r = new PluginResult(PluginResult.Status.ERROR);
+            	        callbackContext.sendPluginResult(r);
+            	        return false;        		    	
+        	    	}    
+        	    }       		        		
+
+        	    callbackContext.success("Init DONE");
+    	        PluginResult r = new PluginResult(PluginResult.Status.OK);
+    	        callbackContext.sendPluginResult(r);        		
     	    }
     	    catch (IllegalArgumentException e)
     	    {
@@ -96,10 +220,10 @@ public class Cimino extends CordovaPlugin {
         return false;
     }
 
+    
     //--------------------------------------------------------------------------
     // LOCAL METHODS
     //--------------------------------------------------------------------------
-
     private String getTempDirectoryPath() 
     {
         File cache = null;
@@ -120,50 +244,27 @@ public class Cimino extends CordovaPlugin {
         cache.mkdirs();
         return cache.getAbsolutePath();
     }
-    
-    /**
-     * 
-     */
-    private void calibrate() 
-    {    	
-        Context context = cordova.getActivity().getApplicationContext();
-        Intent intent = new Intent(context, CameraCalibrationActivity.class);
-        cordova.startActivityForResult((CordovaPlugin) this, intent, 0 );
-    }
-    
-    /**
-     * 
-     */
-    private void capture() 
-    {
-    	File photo = createCaptureFile(encodingType);
-    	this.imageUri = Uri.fromFile(photo);
-    	this.numPics = queryImgDB(whichContentStore()).getCount();
-        Context context = cordova.getActivity().getApplicationContext();
-        Intent intent = new Intent(context, CameraCaptureActivity.class);
-        cordova.startActivityForResult((CordovaPlugin) this, intent, 0 );
 
-    }
-    
-    /**
-     * Called when the camera view exits.
-     *
-     * @param requestCode       The request code originally supplied to startActivityForResult(),
-     *                          allowing you to identify who this result came from.
-     * @param resultCode        The integer result code returned by the child activity through its setResult().
-     * @param intent            An Intent, which can return result data to the caller (various data can be attached to Intent "extras").
-     */
-    public void onActivityResult(int requestCode, int resultCode, Intent intent) {
-    	Log.d("Cimino::Main", "ActivityResult = requestCode:"+requestCode+" resultCode: "+resultCode);
-    	int destType = (requestCode % 16) - 1;
-    	try
-		{
-			this.processResultFromCamera(destType, intent);
-		}
-		catch (IOException e)
-		{
-			e.printStackTrace();
-		}
+    private String getFileDirectoryPath() 
+    {
+        File cache = null;
+
+        // SD Card Mounted
+        if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) 
+        {
+        	// se la cartella non esiste la devo creare?
+            cache = new File(Environment.getExternalStorageDirectory().getAbsolutePath() +
+                    "/Android/data/" + cordova.getActivity().getPackageName() + "/files/");
+        }
+        // Use internal storage
+        else 
+        {
+            cache = cordova.getActivity().getCacheDir();
+        }
+
+        // Create the cache directory if it doesn't exist
+        cache.mkdirs();
+        return cache.getAbsolutePath();
     }    
     
     /**
@@ -183,6 +284,74 @@ public class Cimino extends CordovaPlugin {
         }
         return photo;
     }
+       
+    /**
+     * 
+     */
+    private void capture(JSONObject data) 
+    {
+    	File photo = createCaptureFile(encodingType);
+    	this.imageUri = Uri.fromFile(photo);
+    	this.numPics = queryImgDB(whichContentStore()).getCount();    	
+        Context context = cordova.getActivity().getApplicationContext();
+        Intent intent = new Intent(context, CameraCaptureActivity.class);
+//        Intent intent = new Intent(context, ImageOcrActivity.class);
+        try
+		{
+			intent.putExtra("rows", data.getInt("rows") );
+			intent.putExtra("extra_fields",data.getJSONArray("extra_fields").toString());
+        	intent.putExtra("filepath", data.getString("filepath"));
+		}
+		catch (JSONException e)
+		{
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+        
+        cordova.startActivityForResult((CordovaPlugin) this, intent, 0 );
+    }
+    
+    /**
+     * 
+     */
+    private void process(JSONObject data) 
+    {
+    	this.numPics = queryImgDB(whichContentStore()).getCount();    	
+        Context context = cordova.getActivity().getApplicationContext();
+        Intent intent = new Intent(context, ImageOcrActivity.class);
+        try
+		{
+        	intent.putExtra("filepath", data.getString("filepath"));
+		}
+		catch (JSONException e)
+		{
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+        
+        cordova.startActivityForResult((CordovaPlugin) this, intent, 0 );
+    }    
+    /**
+     * Called when the camera view exits.
+     *
+     * @param requestCode       The request code originally supplied to startActivityForResult(),
+     *                          allowing you to identify who this result came from.
+     * @param resultCode        The integer result code returned by the child activity through its setResult().
+     * @param intent            An Intent, which can return result data to the caller (various data can be attached to Intent "extras").
+     */
+    public void onActivityResult(int requestCode, int resultCode, Intent intent) {
+    	Log.d("Cimino::Main", "ActivityResult = requestCode:"+requestCode+" resultCode: "+resultCode);
+    	int destType = (requestCode % 16) - 1;
+    	try
+		{
+			this.processResultFromOCR(destType, intent);
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+		}
+    }    
+
  
     /**
      * Creates a cursor that can be used to determine how many images we have.
@@ -242,261 +411,52 @@ public class Cimino extends CordovaPlugin {
      * @param destType          In which form should we return the image
      * @param intent            An Intent, which can return result data to the caller (various data can be attached to Intent "extras").
      */
-    private void processResultFromCamera(int destType, Intent intent) throws IOException {
+    private void processResultFromOCR(int destType, Intent intent) throws IOException {
 
         if (intent!=null && intent.hasExtra("imageFile"))
         {
-/*            Bitmap s_image = null;
-            try {
-            	s_image = getScaledBitmap(intent.getExtras().get("imageFile").toString());
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-*/
-        	//Bitmap s_image = BitmapFactory.decodeFile(intent.getExtras().get("imageFile").toString());
-/*        	ByteArrayOutputStream stream = new ByteArrayOutputStream();
-        	s_image.compress(Bitmap.CompressFormat.JPEG, 90, stream);        	
-            byte[] bitmap = stream.toByteArray();
-            stream.close();
-            stream=null;
-            s_image.recycle();
-            s_image=null;
-            
-            Bitmap s_header = null;
-            try {
-            	s_header = getScaledBitmap(intent.getExtras().get("imageFile").toString());
-            } catch (IOException e) {
-                e.printStackTrace();
-            }            
-        	//Bitmap s_header = BitmapFactory.decodeFile(intent.getExtras().get("headerFile").toString());
-        	ByteArrayOutputStream stream2 = new ByteArrayOutputStream();
-        	s_header.compress(Bitmap.CompressFormat.JPEG, 90, stream2);        	
-            byte[] header = stream2.toByteArray();
-            stream2.close();
-            stream2=null;
-            s_header.recycle();
-            s_header=null;
-            
-            // Double-check the bitmap.
-            if (bitmap == null) {
-                Log.d(TAG, "I either have a null image path or bitmap");
-                this.failPicture("Unable to create bitmap!");
-                return;
-            }
-            this.processData(bitmap,header);
-*/
+            checkForDuplicateImage(DATA_URL);
+
+            // Cleans up after picture taking. Checking for duplicates and that kind of stuff.
+
+            // Clean up initial camera-written image file.
+            (new File(FileHelper.stripFileProtocol(this.imageUri.toString()))).delete();
+
+            checkForDuplicateImage(FILE_URI);
+
+
         	JSONObject json = new JSONObject();
             try
 			{
 				json.put("imageFile", intent.getExtras().get("imageFile").toString());
 	            json.put("headerFile", intent.getExtras().get("headerFile").toString());
-	            this.callbackContext.success(json.toString());
+	            json.put("realSizePixelRatio", intent.getExtras().get("realSizePixelRatio").toString());
+				json.put("productRows", intent.getExtras().get("productRows").toString());
+	            this.callbackContext.success(json);
 	                   	
 			}
 			catch (JSONException e)
 			{
 				// TODO Auto-generated catch block
 				e.printStackTrace();
+
+	        	json = null; 
 			}
             
-
-            checkForDuplicateImage(DATA_URL);
-
-            // Cleans up after picture taking. Checking for duplicates and that kind of stuff.
-
-                // Clean up initial camera-written image file.
-            (new File(FileHelper.stripFileProtocol(this.imageUri.toString()))).delete();
-
-            checkForDuplicateImage(FILE_URI);
-
-//            System.gc();
-//            bitmap = null;
-//            header = null;
-        	json = null; 
         }
         else
         {
-        	 //this.callbackContext.error("No image captured");
+        	failPicture("No image captured");
         }
     }
-
-    /**
-     * Return a scaled bitmap based on the target width and height
-     *
-     * @param imagePath
-     * @return
-     * @throws IOException 
-     *//*
-    private Bitmap getScaledBitmap(String imageUrl) throws IOException {
-        // If no new width or height were specified return the original bitmap
-        if (this.targetWidth <= 0 && this.targetHeight <= 0) {
-            InputStream fileStream = null;
-            Bitmap image = null;
-            try {
-                fileStream = FileHelper.getInputStreamFromUriString(imageUrl, cordova);
-                image = BitmapFactory.decodeStream(fileStream);
-            } finally {
-                if (fileStream != null) {
-                    try {
-                        fileStream.close();
-                    } catch (IOException e) {
-                        Log.d(TAG,"Exception while closing file input stream.");
-                    }
-                }
-            }
-            return image;
-        }
-
-        // figure out the original width and height of the image
-        BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inJustDecodeBounds = true;
-        InputStream fileStream = null;
-        try {
-            fileStream = FileHelper.getInputStreamFromUriString(imageUrl, cordova);
-            BitmapFactory.decodeStream(fileStream, null, options);
-        } finally {
-            if (fileStream != null) {
-                try {
-                    fileStream.close();
-                } catch (IOException e) {
-                    Log.d(TAG,"Exception while closing file input stream.");
-                }
-            }
-        }
-        
-        //CB-2292: WTF? Why is the width null?
-        if(options.outWidth == 0 || options.outHeight == 0)
-        {
-            return null;
-        }
-        
-        // determine the correct aspect ratio
-        int[] widthHeight = calculateAspectRatio(options.outWidth, options.outHeight);
-
-        // Load in the smallest bitmap possible that is closest to the size we want
-        options.inJustDecodeBounds = false;
-        options.inSampleSize = calculateSampleSize(options.outWidth, options.outHeight, this.targetWidth, this.targetHeight);
-        Bitmap unscaledBitmap = null;
-        try {
-            fileStream = FileHelper.getInputStreamFromUriString(imageUrl, cordova);
-            unscaledBitmap = BitmapFactory.decodeStream(fileStream, null, options);
-        } finally {
-            if (fileStream != null) {
-                try {
-                    fileStream.close();
-                } catch (IOException e) {
-                    Log.d(TAG,"Exception while closing file input stream.");
-                }
-            }
-        }
-        if (unscaledBitmap == null) {
-            return null;
-        }
-
-        return Bitmap.createScaledBitmap(unscaledBitmap, widthHeight[0], widthHeight[1], true);
-    }*/    
     
-    /**
-     * Maintain the aspect ratio so the resulting image does not look smooshed
-     *
-     * @param origWidth
-     * @param origHeight
-     * @return
-     *//*
-    public int[] calculateAspectRatio(int origWidth, int origHeight) {
-        int newWidth = this.targetWidth;
-        int newHeight = this.targetHeight;
-
-        // If no new width or height were specified return the original bitmap
-        if (newWidth <= 0 && newHeight <= 0) {
-            newWidth = origWidth;
-            newHeight = origHeight;
-        }
-        // Only the width was specified
-        else if (newWidth > 0 && newHeight <= 0) {
-            newHeight = (newWidth * origHeight) / origWidth;
-        }
-        // only the height was specified
-        else if (newWidth <= 0 && newHeight > 0) {
-            newWidth = (newHeight * origWidth) / origHeight;
-        }
-        // If the user specified both a positive width and height
-        // (potentially different aspect ratio) then the width or height is
-        // scaled so that the image fits while maintaining aspect ratio.
-        // Alternatively, the specified width and height could have been
-        // kept and Bitmap.SCALE_TO_FIT specified when scaling, but this
-        // would result in whitespace in the new image.
-        else {
-            double newRatio = newWidth / (double) newHeight;
-            double origRatio = origWidth / (double) origHeight;
-
-            if (origRatio > newRatio) {
-                newHeight = (newWidth * origHeight) / origWidth;
-            } else if (origRatio < newRatio) {
-                newWidth = (newHeight * origWidth) / origHeight;
-            }
-        }
-
-        int[] retval = new int[2];
-        retval[0] = newWidth;
-        retval[1] = newHeight;
-        return retval;
-    }*/
-    
-    /**
-     * Figure out what ratio we can load our image into memory at while still being bigger than
-     * our desired width and height
-     *
-     * @param srcWidth
-     * @param srcHeight
-     * @param dstWidth
-     * @param dstHeight
-     * @return
-     *//*
-    public static int calculateSampleSize(int srcWidth, int srcHeight, int dstWidth, int dstHeight) {
-        final float srcAspect = (float)srcWidth / (float)srcHeight;
-        final float dstAspect = (float)dstWidth / (float)dstHeight;
-
-        if (srcAspect > dstAspect) {
-            return srcWidth / dstWidth;
-        } else {
-            return srcHeight / dstHeight;
-        }
-      }
-    */
-/**
- * Compress bitmap using jpeg, convert to Base64 encoded string, and return to JavaScript.
- *
- * @param bitmap
- */
-/*
-public void processData(byte[] bitmap, byte[] header) {
-    try {
-    	
-            byte[] output_image_encoded = Base64.encode(bitmap, Base64.NO_WRAP);
-            byte[] output_header_encoded = Base64.encode(header, Base64.NO_WRAP);
-            JSONObject json = new JSONObject();
-            json.put("image", new String(output_image_encoded));
-            json.put("header", new String(output_header_encoded));
-            
-            this.callbackContext.success(json.toString());
-            json = null;
-            output_image_encoded = null;
-            output_header_encoded = null;
-    } catch (Exception e) {
-    	e.printStackTrace();
-        this.failPicture("Error compressing image.");
-    }
-}
-*/
-    
-/**
- * Send error message to JavaScript.
- *
- * @param err
- */
-public void failPicture(String err) {
-    this.callbackContext.error(err);
-}
+	/**
+	 * Send error message to JavaScript.
+	 *
+	 * @param err
+	 */
+	public void failPicture(String err) {
+	    this.callbackContext.error(err);
+	}
 
 }

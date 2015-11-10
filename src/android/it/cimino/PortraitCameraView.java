@@ -1,5 +1,7 @@
 package it.cimino;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import org.opencv.android.CameraBridgeViewBase;
@@ -41,8 +43,10 @@ private boolean mStopThread;
 protected Camera mCamera;
 protected JavaCameraFrame[] mCameraFrame;
 private SurfaceTexture mSurfaceTexture;
-private int mCameraId;
+//private int mCameraId;
 public Preview mPreview;
+public Size frameSize;
+protected int rotation = 0;
 
 protected class Preview extends ViewGroup implements SurfaceHolder.Callback {
 
@@ -72,7 +76,10 @@ protected class Preview extends ViewGroup implements SurfaceHolder.Callback {
 	    parameters.setPreviewFormat(ImageFormat.NV21);
 
 	    Size frameSize = calculateCameraFrameSize(sizes, new JavaCameraSizeAccessor(), height, width); //use turn around values here to get the correct prev size for portrait mode
-
+//        if (rotation>0)
+//        {
+//    	    frameSize = calculateCameraFrameSize(sizes, new JavaCameraSizeAccessor(), width, height); //use turn around values here to get the correct prev size for portrait mode
+//        }
         Log.d(TAG, "Set preview size to " + Integer.valueOf((int)frameSize.width) + "x" + Integer.valueOf((int)frameSize.height));
         parameters.setPreviewSize((int)frameSize.width, (int)frameSize.height);
         
@@ -129,21 +136,28 @@ public PortraitCameraView(Context context, AttributeSet attrs) {
     super(context, attrs);
 }
 
+@SuppressWarnings("unused")
 public android.hardware.Camera.Size getTopResolution(List<Camera.Size> mResolutionList, int width,int height, int rotation)
 {
 	android.hardware.Camera.Size optimalSize = null;
 	
     Object[] mResArr = mResolutionList.toArray();
+    int max_width = 0;
     
     for (int i=0; i<mResArr.length; i++)
     {
     	Camera.Size element = (Camera.Size) mResArr[i];
+    	if (max_width<element.width)
+    	{
     	optimalSize = element;
-    	break;
+        	max_width = element.width;
+    	}
+//    	break;
     }
             
     return optimalSize;
 }
+
 
 public android.hardware.Camera.Size getUpperClosestResolution(List<Camera.Size> mResolutionList, int width,int height, int rotation)
 {
@@ -172,9 +186,40 @@ public android.hardware.Camera.Size getUpperClosestResolution(List<Camera.Size> 
     return optimalSize;
 }
 
+public android.hardware.Camera.Size getLowerClosestResolution(List<Camera.Size> mResolutionList, int width,int height, int rotation)
+{
+	android.hardware.Camera.Size optimalSize = null;
+
+    ArrayList<Object> tempElements = new ArrayList<Object>();
+    tempElements.addAll(mResolutionList);
+	Collections.reverse(tempElements);
+
+	Object[] mResArr = tempElements.toArray();
+    
+    for (int i=0; i<mResArr.length; i++)
+    {
+    	Camera.Size element = (Camera.Size) mResArr[i];
+    	int e_width = element.width;
+    	int e_height = element.height;
+        if(rotation==0)
+        {
+        	e_height = element.width;
+        	e_width = element.height;
+        }
+        
+    	if (e_width>=width && e_height>=height)
+    	{
+    		break;
+    	}        	
+    	optimalSize = element;
+    }
+            
+    return optimalSize;
+}
+
 
 protected boolean initializeCamera(int width, int height) {
-    Log.d(TAG, "Initialize java camera");
+        Log.d(TAG, "Initialize java camera "+width+"x"+height);
     boolean result = true;
     synchronized (this) {
         mCamera = null;
@@ -188,7 +233,7 @@ protected boolean initializeCamera(int width, int height) {
             if (cameraInfo.facing == android.hardware.Camera.CameraInfo.CAMERA_FACING_BACK) {
                 try {
                     mCamera = Camera.open(i);
-                    mCameraId = i;
+                    //mCameraId = i;
                     connected = true;
                 } catch (RuntimeException e) {
                     Log.e(TAG, "Camera #" + i + "failed to open: " + e.getMessage());
@@ -197,23 +242,41 @@ protected boolean initializeCamera(int width, int height) {
             }
         }
 
-        if (mCamera == null) return false;
+            if (mCamera == null)
+                return false;
 
         /* Now set camera parameters */
         try {
             Camera.Parameters params = mCamera.getParameters();
             Log.d(TAG, "getSupportedPreviewSizes()");
-            List<Camera.Size> sizes = params.getSupportedPreviewSizes();
+                List<android.hardware.Camera.Size> sizes = params.getSupportedPreviewSizes();
 
             if (sizes != null) {
+                WindowManager wm = (WindowManager) this.getContext().getSystemService(Context.WINDOW_SERVICE);
+                Display display = wm.getDefaultDisplay();
+                //Point displaySize = new Point();
+                //display.getSize(displaySize);
+                DisplayMetrics displayMetrics = new DisplayMetrics();
+                display.getMetrics(displayMetrics);
+                
+                rotation = display.getRotation();
+                Log.d(TAG,"Rotation: "+rotation);
+                
                 /* Select the size that fits surface considering maximum size allowed */
-                Size frameSize = calculateCameraFrameSize(sizes, new JavaCameraSizeAccessor(), height, width); //use turn around values here to get the correct prev size for portrait mode
+                if (rotation==0)
+                {
+                frameSize = calculateCameraFrameSize(sizes, new JavaCameraSizeAccessor(), height, width); //use turn around values here to get the correct prev size for portrait mode
+                }
+                else
+                {
+                    frameSize = calculateCameraFrameSize(sizes, new JavaCameraSizeAccessor(), width, height);
+                }
 
                 params.setPreviewFormat(ImageFormat.NV21);
                 Log.d(TAG, "Set preview size to " + Integer.valueOf((int)frameSize.width) + "x" + Integer.valueOf((int)frameSize.height));
                 params.setPreviewSize((int)frameSize.width, (int)frameSize.height);
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH && !android.os.Build.MODEL.equals("GT-I9100"))
                     params.setRecordingHint(true);
 
                 List<String> FocusModes = params.getSupportedFocusModes();
@@ -222,31 +285,31 @@ protected boolean initializeCamera(int width, int height) {
                 	/*if (FocusModes.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE))
                 	{
                         params.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE);
+                        Log.d(TAG, "Set focus mode OK (FOCUS_MODE_CONTINUOUS_PICTURE)");
                 	}                
-                	else if (FocusModes.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO))
+                	else*/ if (FocusModes.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO))
 	                {
+                        Log.d(TAG, "Set focus mode OK (FOCUS_MODE_CONTINUOUS_VIDEO)");
                         params.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO);
 	                }
-                	else
-                	{*/
+                	else if (FocusModes.contains(Camera.Parameters.FOCUS_MODE_AUTO))
+                	{
                 		params.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
-                	//}
+                        Log.d(TAG, "Set focus mode OK (FOCUS_MODE_AUTO)");
+                	}
+                	else
+                	{
+                		params.setFocusMode(Camera.Parameters.FOCUS_MODE_FIXED);
+                        Log.d(TAG, "Set focus mode OK (FOCUS_MODE_FIXED)");                		
+                	}
                 }
-
-                WindowManager wm = (WindowManager) this.getContext().getSystemService(Context.WINDOW_SERVICE);
-                Display display = wm.getDefaultDisplay();
-                //Point displaySize = new Point();
-                //display.getSize(displaySize);
-                DisplayMetrics displayMetrics = new DisplayMetrics();
-                display.getMetrics(displayMetrics);
-                
-                int rotation = display.getRotation();
 
                 mCamera.setParameters(params);
                 params = mCamera.getParameters();
                 params.setFlashMode(Parameters.FLASH_MODE_TORCH);
-                Camera.Size optimalSize = getTopResolution(params.getSupportedPictureSizes(), width, height, rotation);
+                Camera.Size optimalSize = this.getTopResolution(params.getSupportedPictureSizes(), width, height, rotation);
                 params.setPictureSize(optimalSize.width,optimalSize.height);
+                Log.d(TAG, "Set picture size to " + optimalSize.width + "x" + optimalSize.height);                
                 mCamera.setParameters(params);
 
                 mFrameWidth = params.getPreviewSize().height; //the frame width and height of the super class are used to generate the cached bitmap and they need to be the size of the resulting frame
@@ -254,6 +317,13 @@ protected boolean initializeCamera(int width, int height) {
 
                 int realWidth = mFrameHeight; //the real width and height are the width and height of the frame received in onPreviewFrame
                 int realHeight = mFrameWidth;
+
+                if (rotation>0){
+                    mFrameWidth = params.getPreviewSize().width; 
+                    mFrameHeight = params.getPreviewSize().height;
+                    realWidth = mFrameWidth; 
+                    realHeight = mFrameHeight;
+                }
 
                 if ((getLayoutParams().width == LayoutParams.MATCH_PARENT) && (getLayoutParams().height == LayoutParams.MATCH_PARENT))
                     mScale = Math.min(((float)height)/mFrameHeight, ((float)width)/mFrameWidth);
@@ -284,10 +354,18 @@ protected boolean initializeCamera(int width, int height) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
                     mSurfaceTexture = new SurfaceTexture(MAGIC_TEXTURE_ID);
                     mCamera.setPreviewTexture(mSurfaceTexture);
-                } else
+                } 
+                else
+                {
+                    if (rotation==0)
                 {
                 	requestLayout();
                 	mCamera.setPreviewDisplay(mPreview.mHolder);
+                }
+                    else
+                    {
+                        mCamera.setPreviewDisplay(null);
+                    }
                 }
                 /* Finally we are ready to start the preview */
                 Log.d(TAG, "startPreview");
@@ -307,6 +385,8 @@ protected boolean initializeCamera(int width, int height) {
 protected void releaseCamera() {
     synchronized (this) {
         if (mCamera != null) {
+            	Parameters params = mCamera.getParameters();
+            	params.setFlashMode(Parameters.FLASH_MODE_OFF);
             mCamera.stopPreview();
             mCamera.setPreviewCallback(null);
 
@@ -332,6 +412,7 @@ protected boolean connectCamera(int width, int height) {
      */
     /* First step - initialize camera connection */
     Log.d(TAG, "Connecting to camera");
+        
     if (!initializeCamera(width, height))
         return false;
 
@@ -344,6 +425,7 @@ protected boolean connectCamera(int width, int height) {
     return true;
 }
 
+    @Override
 protected void disconnectCamera() {
     /* 1. We need to stop thread which updating the frames
      * 2. Stop camera and release it
@@ -368,6 +450,7 @@ protected void disconnectCamera() {
     releaseCamera();
 }
 
+    @Override
 public void onPreviewFrame(byte[] frame, Camera arg1) {
     //Log.d(TAG, "Preview Frame received. Frame size: " + frame.length);
     synchronized (this) {
@@ -385,20 +468,43 @@ private class JavaCameraFrame implements CvCameraViewFrame {
     private int mHeight;
     private Mat mRotated;
 
+    @Override
     public Mat gray() {
-        if (mRotated != null) mRotated.release();
-        mRotated = mYuvFrameData.submat(0, mWidth, 0, mHeight); //submat with reversed width and height because its done on the landscape frame
-        mRotated = mRotated.t();
-        Core.flip(mRotated, mRotated, 1);
-        return mRotated;
+    	if (rotation==0)
+    	{
+	        if (mRotated != null) mRotated.release();
+	        mRotated = mYuvFrameData.submat(0, mWidth, 0, mHeight); //submat with reversed width and height because its done on the landscape frame
+	        mRotated = mRotated.t();
+	        Core.flip(mRotated, mRotated, 1);
+	        return mRotated;
+	    }
+    	else
+    	{
+    		return mYuvFrameData.submat(0, mHeight, 0, mWidth);
+    	}
     }
 
+        @Override
     public Mat rgba() {
-        Imgproc.cvtColor(mYuvFrameData, mRgba, Imgproc.COLOR_YUV2BGR_NV12, 4);
-        if (mRotated != null) mRotated.release();
-        mRotated = mRgba.t();
-        Core.flip(mRotated, mRotated, 1);
-        return mRotated;
+        if (rotation==0)
+        {
+	        Imgproc.cvtColor(mYuvFrameData, mRgba, Imgproc.COLOR_YUV2BGR_NV12, 4);
+	        if (mRotated != null) mRotated.release();
+	        mRotated = mRgba.t();
+	        Core.flip(mRotated, mRotated, 1);
+	        return mRotated;
+	    }
+        else
+        {
+        	Imgproc.cvtColor(mYuvFrameData, mRgba, Imgproc.COLOR_YUV2RGBA_NV21, 4);
+        	if (mRotated != null) mRotated.release();
+            /*
+            mRotated = mRgba.clone();
+            Core.flip(mRotated, mRotated, -1);
+            return mRotated;
+            */
+            return mRgba;
+        }
     }
 
     public JavaCameraFrame(Mat Yuv420sp, int width, int height) {
@@ -419,12 +525,14 @@ private class JavaCameraFrame implements CvCameraViewFrame {
 
 private class CameraWorker implements Runnable {
 
+        @Override
     public void run() {
         do {
             synchronized (PortraitCameraView.this) {
                 try {
                     PortraitCameraView.this.wait();
                 } catch (InterruptedException e) {
+                    e.printStackTrace();
                     Log.e(TAG, "CameraWorker interrupted", e);
                 }
             }

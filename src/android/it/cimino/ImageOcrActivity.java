@@ -24,29 +24,21 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.opencv.android.BaseLoaderCallback;
-import org.opencv.android.CameraBridgeViewBase.CvCameraViewFrame;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.android.Utils;
 import org.opencv.core.Core;
 import org.opencv.core.CvException;
 import org.opencv.core.CvType;
-import org.opencv.core.KeyPoint;
 import org.opencv.core.Mat;
-import org.opencv.core.MatOfKeyPoint;
 import org.opencv.core.MatOfPoint;
 import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
 import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
-import org.opencv.features2d.FeatureDetector;
-//import org.opencv.features2d.Features2d;
 import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
-//import org.opencv.imgproc.LineSegmentDetector;
-//import org.opencv.utils.Converters;
-import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
@@ -55,27 +47,8 @@ import com.abbyy.ocrsdk.Client;
 import com.abbyy.ocrsdk.Task;
 import com.abbyy.ocrsdk.TextFieldSettings;
 import com.googlecode.tesseract.android.TessBaseAPI;
-//import com.googlecode.tesseract.android.TessBaseAPI.PageSegMode;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 import it.ciminotrack.R;
-//import android.animation.RectEvaluator;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.ProgressDialog;
@@ -85,56 +58,26 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
-//import android.graphics.Canvas;
-//import android.graphics.ColorMatrix;
-//import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Matrix;
-//import android.graphics.Paint;
-import android.hardware.Camera;
-//import android.hardware.Camera.AutoFocusCallback;
-//import android.media.MediaPlayer;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.util.Log;
-//import android.view.Menu;
-//import android.view.MenuItem;
-import android.view.MotionEvent;
-//import android.view.SubMenu;
-import android.view.SurfaceView;
-import android.view.View;
-import android.view.View.OnTouchListener;
 import android.view.WindowManager;
-//import android.webkit.WebView.HitTestResult;
-import android.widget.Button;
-import android.widget.CompoundButton;
+import android.widget.ImageView;
 import android.widget.Toast;
-import android.widget.ToggleButton;
 
-@SuppressWarnings("deprecation")
-public class CameraCaptureActivity extends Activity implements CvCameraViewListener2, OnTouchListener {
-    private static final String TAG = "Cimino::CameraCapture";
+public class ImageOcrActivity extends Activity{
+    private static final String TAG = "Cimino::ImageOCR";
 
-    private MyJavaCameraView mOpenCvCameraView;
-//    private List<android.hardware.Camera.Size> mResolutionList;
-//    private MenuItem[] mEffectMenuItems;
-//    private SubMenu mColorEffectsMenu;
-//    private MenuItem[] mResolutionMenuItems;
-//    private SubMenu mResolutionMenu;
-    private int rows = 0;
-    private int cols = 0;
-    private Point[] corners2f = new Point[4];
-//    private Point[] corners2f_snap = new Point[4];
-    private Button cameraButton;
-    private ToggleButton toggleFlashButton;
+    private ImageView selected_photo;
+    private Bitmap inputBitmap;
     private ProgressDialog progressDialog;
     @SuppressLint("SimpleDateFormat")
 	private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
     private String currentDateandTime = "";
     private String currentFileName  = "";
-    private boolean featurePrecision = false;
     boolean bIsPictureTaking = false; 
-    private boolean bIsAutoFocusStarted = false;
     private TessBaseAPI baseApi = null;
     private Client restClient;
     private String abbyLanguage = "Italian";
@@ -142,7 +85,7 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
     private String charWhiteList = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890'.,:/|-àèìòùé";
     private String charWhiteListLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
       
-    public CameraCaptureActivity() {
+    public ImageOcrActivity() {
         Log.i(TAG, "Instantiated new " + this.getClass());   
         ClientSettings.setupProxy();
 		
@@ -189,24 +132,7 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
             Toast.makeText(this, "portrait", Toast.LENGTH_SHORT).show();
         }
     }
-    /*
-    private Point computeIntersect(double[] a, double[] b)
-    {
-    	double x1 = a[0], y1 = a[1], x2 = a[2], y2 = a[3];
-    	double x3 = b[0], y3 = b[1], x4 = b[2], y4 = b[3];
-        double d = ((float)(x1-x2) * (y3-y4)) - ((y1-y2) * (x3-x4));
-        		
-        if (d>0)
-        {
-            Point pt = new Point();
-            pt.x = ((x1*y2 - y1*x2) * (x3-x4) - (x1-x2) * (x3*y4 - y3*x4)) / d;
-            pt.y = ((x1*y2 - y1*x2) * (y3-y4) - (y1-y2) * (x3*y4 - y3*x4)) / d;
-            return pt;
-        }
-        else
-            return new Point(-1, -1);
-    }
-    */
+
     @SuppressLint("ClickableViewAccessibility")
 	private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
@@ -215,8 +141,6 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
                 case LoaderCallbackInterface.SUCCESS:
                 {
                     Log.i(TAG, "OpenCV loaded successfully");
-                    mOpenCvCameraView.enableView();
-                    mOpenCvCameraView.setOnTouchListener(CameraCaptureActivity.this);
                 } break;
                 default:
                 {
@@ -232,64 +156,37 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
         Log.i(TAG, "called onCreate");
         super.onCreate(savedInstanceState);
         
+        Bundle extras = getIntent().getExtras(); 
+        currentFileName = extras.getString("filepath");
+        
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        setContentView(R.layout.camera_capture_surface_view);
-        mOpenCvCameraView = (MyJavaCameraView) findViewById(R.id.camera_capture_activity_java_surface_view);        
-        mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
-        mOpenCvCameraView.setCvCameraViewListener(this);
-        mOpenCvCameraView.disableFpsMeter();
-        mOpenCvCameraView.initParent(CameraCaptureActivity.this);
+        setContentView(R.layout.ocr_view);
+        selected_photo = (ImageView) findViewById(R.id.selected_photo);
+        File imgFile = new File(currentFileName);
         
-        toggleFlashButton = (ToggleButton) findViewById(R.id.toggleFlashButton);
-        toggleFlashButton.setChecked(true);
-        toggleFlashButton.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                if (isChecked) {
-                	mOpenCvCameraView.FlashlightON();
-                } else {
-                	mOpenCvCameraView.FlashlightOFF();
-                }
-            }
-        });
+        Bitmap myBitmap = BitmapFactory.decodeFile(imgFile.getAbsolutePath());
         
-        cameraButton = (Button) findViewById(R.id.cameraButton);        
-        cameraButton.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-            	synchronized(this) {
-//	            	corners2f_snap = corners2f;
-//	            	if (corners2f_snap.length==4) // bIsAutoFocused && 
-//	            	{
-	        			Log.d(TAG,"###### new ProgressDialog");
-	        			progressDialog = new ProgressDialog(CameraCaptureActivity.this);
-	        			progressDialog.setMessage("Attendere, elaborazione in corso...");
-	        			progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
-	        			progressDialog.setProgress(0);  	    	
-	        			progressDialog.setMax(100);        
-	        			progressDialog.setCancelable(false);
-	        			Log.d(TAG,"###### progressDialog.show()");
-	          	    	progressDialog.show();           	    
-	          	    	
-	                	currentDateandTime = sdf.format(new Date());
-	                	currentFileName = getTempDirectoryPath() + "/sample_picture_" + currentDateandTime + ".jpg";
-	
-	        			Log.d(TAG,"###### mOpenCvCameraView.takePicture start");
-				        bIsPictureTaking = true;  //set it to true to avoid onKeyDown dispatching during taking picture. it may be time-consuming
-				        bIsAutoFocusStarted = false; //reset to false
-	        			mOpenCvCameraView.takePicture(currentFileName);
-	        			Log.d(TAG,"###### mOpenCvCameraView.takePicture end");
-	        			
-	                    //play the autofocus sound
-	                    //MediaPlayer.create(MyJavaCameraView.this, R.raw.auto_focus).start();
-	
-//	            	}
-//	            	else
-//	            	{
-//	            		Toast.makeText(CameraCaptureActivity.this, "Non hai inquadrato bene il documento, riprova...", Toast.LENGTH_SHORT).show();
-//	            	}
-            	}
-            }
-        });
+        selected_photo.setImageBitmap(myBitmap);
+                
+		Log.d(TAG,"###### new ProgressDialog");
+		progressDialog = new ProgressDialog(ImageOcrActivity.this);
+		progressDialog.setMessage("Attendere, elaborazione in corso...");
+		progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+		progressDialog.setProgress(0);  	    	
+		progressDialog.setMax(100);        
+		progressDialog.setCancelable(false);
+		Log.d(TAG,"###### progressDialog.show()");
+    	progressDialog.show();           	    
+    	
+    	currentDateandTime = sdf.format(new Date());
+    	currentFileName = getTempDirectoryPath() + "/sample_picture_" + currentDateandTime + ".jpg";
+
+		Log.d(TAG,"###### mOpenCvCameraView.takePicture start");
+        bIsPictureTaking = true;  //set it to true to avoid onKeyDown dispatching during taking picture. it may be time-consuming
+        this.doBackgroundTask();
+		Log.d(TAG,"###### mOpenCvCameraView.takePicture end");
+		
     }
 
     public void doBackgroundTask()
@@ -303,12 +200,8 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
     public void onPause()
     {
         super.onPause();
-        if (mOpenCvCameraView != null)
-        {
-        	if ( progressDialog!=null && progressDialog.isShowing() ){
-                progressDialog.dismiss();
-            }
-            mOpenCvCameraView.disableView();
+    	if ( progressDialog!=null && progressDialog.isShowing() ){
+            progressDialog.dismiss();
         }
     }
 
@@ -327,365 +220,9 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
 
     public void onDestroy() {
         super.onDestroy();
-        if (mOpenCvCameraView != null)
-        	if ( progressDialog!=null && progressDialog.isShowing() ){
-                progressDialog.dismiss();
-            }
-        	mOpenCvCameraView.FlashlightOFF();
-            mOpenCvCameraView.disableView();
-    }
-
-    public void onCameraViewStarted(int width, int height) {
-        mOpenCvCameraView.setDefaultParameters();        
-    }
-
-    public void onCameraViewStopped() {
-    }
-    
-    public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
-    	Mat mRgbaT = inputFrame.rgba();
-    	
-    	return mRgbaT; 
-    }
-    
-    public Mat _onCameraFrame(CvCameraViewFrame inputFrame) {
-    	Mat mRgbaT = inputFrame.rgba();
-    	Size sizeRgba = mRgbaT.size();
-    	rows = (int) sizeRgba.height;
-        cols = (int) sizeRgba.width;
-        
-        int box_width = 100; //cols*20/100; // 20%
-        //int box_height = rows*20/100; // 20%
-        int box_height = box_width;
-    	
-        Rect roiUL = new Rect(0,0,box_width,box_height);
-        Rect roiUR = new Rect(cols-box_width,0,box_width,box_height);
-        Rect roiDL = new Rect(0,rows-box_height,box_width,box_height);
-        Rect roiDR = new Rect(cols-box_width,rows-box_height,box_width,box_height);
-        
-        Mat gray = new Mat();
-//        Mat _tresh = new Mat();
-        
-        Imgproc.cvtColor(mRgbaT, gray, Imgproc.COLOR_BGR2GRAY);
-        //Imgproc.GaussianBlur(gray, gray, new Size(5, 5), 5);
-        //Imgproc.GaussianBlur(gray, gray, new Size(0, 0), 3); //denoise
-        Imgproc.medianBlur(gray, gray, 11);
-        //Core.addWeighted(gray, 1.5, gray, -0.5, 0, gray); //sharpen
-        
-//    	Imgproc.adaptiveThreshold(gray, gray,255,Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,Imgproc.THRESH_BINARY,11,2);        
-//      double otsu_thresh_val = Imgproc.threshold(gray, gray, 70, 255, Imgproc.THRESH_BINARY+Imgproc.THRESH_OTSU);
-//        Log.d(TAG,"Canny threshold: "+otsu_thresh_val);
-//        Imgproc.Canny( gray, gray, otsu_thresh_val, otsu_thresh_val*2, 3, true); // 50,200?
-//        Imgproc.Canny( gray, gray, (double)100, (double)100, 3, true); // 50,200?
-
-        double otsu_thresh_val = 0;
-        mRgbaT = gray;
-    	Mat croppedUL = new Mat(gray,roiUL);
-    	if (featurePrecision)
-    	{
-        	otsu_thresh_val = Imgproc.threshold(croppedUL, croppedUL, Core.mean(croppedUL).val[0]/2, 255, Imgproc.THRESH_BINARY+Imgproc.THRESH_OTSU);
-        	Imgproc.Canny( croppedUL, croppedUL, otsu_thresh_val, otsu_thresh_val*2, 3, true);
-    	}
-    	Mat croppedUR = new Mat(gray,roiUR);
-    	if (featurePrecision)
-    	{
-        	otsu_thresh_val = Imgproc.threshold(croppedUR, croppedUR, Core.mean(croppedUR).val[0]/2, 255, Imgproc.THRESH_BINARY+Imgproc.THRESH_OTSU);
-        	Imgproc.Canny( croppedUR, croppedUR, otsu_thresh_val, otsu_thresh_val*2, 3, true);
-    	}
-    	Mat croppedDL = new Mat(gray,roiDL);
-    	if (featurePrecision)
-    	{
-	    	otsu_thresh_val = Imgproc.threshold(croppedDL, croppedDL, Core.mean(croppedDL).val[0]/2, 255, Imgproc.THRESH_BINARY+Imgproc.THRESH_OTSU);
-	    	Imgproc.Canny( croppedDL, croppedDL, otsu_thresh_val, otsu_thresh_val*2, 3, true);
-    	}
-    	Mat croppedDR = new Mat(gray,roiDR);    	
-    	if (featurePrecision)
-    	{
-	    	otsu_thresh_val = Imgproc.threshold(croppedDR, croppedDR, Core.mean(croppedDR).val[0]/2, 255, Imgproc.THRESH_BINARY+Imgproc.THRESH_OTSU);
-	    	Imgproc.Canny( croppedDR, croppedDR, otsu_thresh_val, otsu_thresh_val*2, 3, true);
-    	}
-    	List<Point> corners = new ArrayList<Point>();
-    	
-        MatOfKeyPoint points = new MatOfKeyPoint();
-        FeatureDetector fast = FeatureDetector.create(FeatureDetector.FAST);
-
-    	/* ---------------- UL ------------ */
-        Point cornerUL = new Point();
-
-        fast.detect(croppedUL, points);
-        KeyPoint[] keypoints = points.toArray();        	
-
-        //Log.d(TAG,"croppedUL points:"+keypoints.length);
-        int count = keypoints.length;
-        for (int i=0;i<count;i++)
-        {
-        	Point pt = keypoints[i].pt;
-        	cornerUL.x+=pt.x;
-        	cornerUL.y+=pt.y;
+    	if ( progressDialog!=null && progressDialog.isShowing() ){
+            progressDialog.dismiss();
         }
-        cornerUL.x /= count;
-        cornerUL.y /= count;
-        
-        if (cornerUL.x>0 && cornerUL.y>0)
-        {
-        	corners.add(cornerUL);
-        	Imgproc.circle(mRgbaT, cornerUL, 20, new Scalar(0,255,0),-1);
-        }
-        
-        /* ---------------- UR ------------ */
-        Point cornerUR = new Point();
-        
-        fast.detect(croppedUR, points);        
-        keypoints = points.toArray();
-
-        //Log.d(TAG,"croppedUR points:"+keypoints.length);
-        count = keypoints.length;
-        for (int i=0;i<count;i++)
-        {
-        	Point pt = keypoints[i].pt;
-        	cornerUR.x+=pt.x;
-        	cornerUR.y+=pt.y;
-        	pt.x += cols-box_width;
-        }
-        cornerUR.x /= count;
-        cornerUR.y /= count;        
-        cornerUR.x += cols-box_width;
-
-        if (cornerUR.x>0 && cornerUR.y>0)
-        {
-        	corners.add(cornerUR);
-        	Imgproc.circle(mRgbaT, cornerUR, 20, new Scalar(0,255,0),-1);
-        }
-        
-        /* ---------------- DR ------------ */
-        Point cornerDR = new Point();
-        
-        fast.detect(croppedDR, points);        
-        keypoints = points.toArray();
-
-        //Log.d(TAG,"cornerDR points:"+keypoints.length);
-        count = keypoints.length;
-        for (int i=0;i<count;i++)
-        {
-        	Point pt = keypoints[i].pt;
-        	cornerDR.x+=pt.x;
-        	cornerDR.y+=pt.y;        	
-        	pt.x += cols-box_width;
-        	pt.y += rows-box_height;
-        	
-        }
-        cornerDR.x /= count;
-        cornerDR.y /= count;   
-        cornerDR.x += cols-box_width;
-        cornerDR.y += rows-box_height;
-        
-        if (cornerDR.x>0 && cornerDR.y>0)
-        {
-        	corners.add(cornerDR);
-        	Imgproc.circle(mRgbaT, cornerDR, 20, new Scalar(0,255,0),-1);
-        }
-        
-        /* ---------------- DL ------------ */
-        Point cornerDL = new Point();
-        
-        fast.detect(croppedDL, points);        
-        keypoints = points.toArray();
-
-        //Log.d(TAG,"croppedDL points:"+keypoints.length);
-        count = keypoints.length;
-        for (int i=0;i<count;i++)
-        {
-        	Point pt = keypoints[i].pt;
-        	cornerDL.x+=pt.x;
-        	cornerDL.y+=pt.y;
-        	pt.y += rows-box_height;
-        }
-        cornerDL.x /= count;
-        cornerDL.y /= count;   
-        cornerDL.y += rows-box_height;
-        
-        if (cornerDL.x>0 && cornerDL.y>0)
-        {
-        	corners.add(cornerDL);
-        	Imgproc.circle(mRgbaT, cornerDL, 20, new Scalar(0,255,0),-1);
-        }
-      
-        /* -------------------------------------- */
-        Imgproc.rectangle(mRgbaT, new Point(0,0), new Point(box_width,box_height), new Scalar(127,127,0));
-        Imgproc.rectangle(mRgbaT, new Point(cols-box_width,0), new Point(cols,box_height), new Scalar(127,127,0));
-        Imgproc.rectangle(mRgbaT, new Point(0,rows-box_width), new Point(box_width,rows), new Scalar(127,127,0));
-        Imgproc.rectangle(mRgbaT, new Point(cols-box_width,rows-box_width), new Point(cols,rows), new Scalar(127,127,0));
-    	       
-        corners2f = (Point[]) corners.toArray(new Point[corners.size()]);
-
-        //Log.d(TAG,"corners found: "+(corners2f.length));
-        if (corners2f.length==4)
-        {
-        	//List<MatOfPoint> mot = new ArrayList<MatOfPoint>();
-        	//mot.
-        	//Imgproc.fillPoly(gray, , color);
-/*        	
-        	runOnUiThread(new Runnable() {
-           	     @Override
-           	     public void run() {
-
-           	    	cameraButton.requestFocus();
-           	    	cameraButton.setVisibility(Button.VISIBLE);
-           	    }
-           	});
-*/           	
-
-        	Imgproc.line(mRgbaT, corners2f[0], corners2f[1], new Scalar(255,255,0), 3);
-        	Imgproc.line(mRgbaT, corners2f[1], corners2f[2], new Scalar(255,255,0), 3);
-        	Imgproc.line(mRgbaT, corners2f[2], corners2f[3], new Scalar(255,255,0), 3);
-        	Imgproc.line(mRgbaT, corners2f[3], corners2f[0], new Scalar(255,255,0), 3);
-     	
-        }
-        else
-        {
-/*        	
-        	runOnUiThread(new Runnable() {
-          	    @Override
-           	    public void run() {
-          	    	cameraButton.requestFocus();
-          	    	cameraButton.setVisibility(Button.INVISIBLE);
-           	    }
-        	});
-*/        	
-        	
-        }
-        gray=null;
-        //_tresh = null;
-        croppedDL=null;
-        croppedDR=null;
-        croppedUL=null;
-        croppedUR=null;
-        
-    	return mRgbaT; 
-    }
-
-   
-    /*
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-		List<String> effects = mOpenCvCameraView.getEffectList();
-
-        if (effects == null) {
-            Log.e(TAG, "Color effects are not supported by device!");
-            return true;
-        }
-
-        mColorEffectsMenu = menu.addSubMenu("Color Effect");
-        mEffectMenuItems = new MenuItem[effects.size()];
-
-        int idx = 0;
-        ListIterator<String> effectItr = effects.listIterator();
-        while(effectItr.hasNext()) {
-           String element = effectItr.next();
-           mEffectMenuItems[idx] = mColorEffectsMenu.add(1, idx, Menu.NONE, element);
-           idx++;
-        }
-
-        mResolutionMenu = menu.addSubMenu("Resolution");
-        mResolutionList = mOpenCvCameraView.getResolutionList();
-        mResolutionMenuItems = new MenuItem[mResolutionList.size()];
-
-        ListIterator<android.hardware.Camera.Size> resolutionItr = mResolutionList.listIterator();
-        idx = 0;
-        while(resolutionItr.hasNext()) {
-            android.hardware.Camera.Size element = resolutionItr.next();
-            mResolutionMenuItems[idx] = mResolutionMenu.add(2, idx, Menu.NONE,
-                    Integer.valueOf(element.width).toString() + "x" + Integer.valueOf(element.height).toString());
-            idx++;
-         }
-
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-    	Log.i(TAG, "called onOptionsItemSelected; selected item: " + item);
-        if (item.getGroupId() == 1)
-        {
-            mOpenCvCameraView.setEffect((String) item.getTitle());
-            Toast.makeText(this, mOpenCvCameraView.getEffect(), Toast.LENGTH_SHORT).show();
-        }
-        else if (item.getGroupId() == 2)
-        {
-            int id = item.getItemId();
-            android.hardware.Camera.Size resolution = mResolutionList.get(id);
-            mOpenCvCameraView.setResolution(resolution);
-            //resolution = mOpenCvCameraView.getResolution();
-            String caption = Integer.valueOf(resolution.width).toString() + "x" + Integer.valueOf(resolution.height).toString();
-            Toast.makeText(this, caption, Toast.LENGTH_SHORT).show();
-        }
-
-        return true;
-    }
-*/
-    
-    public void submitFocusAreaRect(final android.graphics.Rect touchRect)
-    {    	
-        Camera.Parameters cameraParameters = mOpenCvCameraView.getParameters();
-
-        if (cameraParameters.getMaxNumFocusAreas() == 0)
-        {
-            return;
-        }
-
-        // Convert from View's width and height to +/- 1000
- 
-        android.graphics.Rect focusArea = new android.graphics.Rect();
-
-        focusArea.set(touchRect.left * 2000 / mOpenCvCameraView.getWidth() - 1000, 
-                          touchRect.top * 2000 / mOpenCvCameraView.getHeight() - 1000,
-                          touchRect.right * 2000 / mOpenCvCameraView.getWidth() - 1000,
-                          touchRect.bottom * 2000 / mOpenCvCameraView.getHeight() - 1000);
-
-        // Submit focus area to camera
-
-        ArrayList<Camera.Area> focusAreas = new ArrayList<Camera.Area>();
-        focusAreas.add(new Camera.Area(focusArea, 1000));
-
-//        cameraParameters.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
-        cameraParameters.setFocusAreas(focusAreas);
-        mOpenCvCameraView.setParameters(cameraParameters);
-
-        // Start the autofocus operation
-        if (!bIsPictureTaking && !bIsAutoFocusStarted){
-            //start autofocus if it was-not started
-            AutoFocusCallBackImpl autoFocusCallBack = new AutoFocusCallBackImpl();
-            mOpenCvCameraView.autoFocus(autoFocusCallBack);
-            //set the bIsAutoFocusStarted trigger to false to avoid extra autofocus attempts
-            bIsAutoFocusStarted = true;
-        }        
-
-    }
-    
-    public void doFocus(float x, float y, float touchMajor, float touchMinor)
-    {
-		android.graphics.Rect touchRect = new android.graphics.Rect((int)(x - touchMajor / 2), (int)(y - touchMinor / 2), (int)(x + touchMajor / 2), (int)(y + touchMinor / 2));
-        this.submitFocusAreaRect(touchRect);
-    }
-    
-    @SuppressLint("ClickableViewAccessibility")
-	@Override
-    public boolean onTouch(View v, MotionEvent event) {
-    	synchronized(this) {
-	        Log.i(TAG,"onTouch event");
-	        // posso usare il touch per aggiustare il FOCUS
-	        if (event.getAction() == MotionEvent.ACTION_DOWN)
-	        {
-	            float x = event.getX();
-	            float y = event.getY();
-	            float touchMajor = event.getTouchMajor();
-	            float touchMinor = event.getTouchMinor();
-	            Log.d(TAG,"onTouch: "+x+","+y+" - "+touchMajor+","+touchMinor);
-	
-	            doFocus(x,y,touchMajor,touchMinor);
-	        }        
-	        return false;
-    	}
     }
     
     private String getTempDirectoryPath() 
@@ -745,141 +282,37 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
 		@Override
 		protected void onPreExecute() {
 		    Log.d(TAG,"###### IAmABackgroundTask.onPreExecute");
-		    cameraButton.requestFocus();
-		    cameraButton.setEnabled(false);
 		}
 		
 		@Override
 		protected void onPostExecute(Boolean result) {
 			Log.d(TAG,"###### IAmABackgroundTask.onPostExecute");
-			cameraButton.requestFocus();
-			cameraButton.setEnabled(true);
 
-		    if (CameraCaptureActivity.this != null) {
+		    if (ImageOcrActivity.this != null) {
 	        	if ( progressDialog!=null && progressDialog.isShowing() ){
 	                progressDialog.dismiss();
-	                CameraCaptureActivity.this.finish();
+	                ImageOcrActivity.this.finish();
 	            }
 	    	}
 		
 		}
 		
-		/*
-		@SuppressLint("SimpleDateFormat")
-		@Override
-		protected Boolean doInBackground(String... params) {
-			Log.d(TAG,"###### IAmABackgroundTask.doInBackground");
-        	mOpenCvCameraView.FlashlightOFF();
-            mOpenCvCameraView.disableView();	                
-
-            Log.d(TAG,"###### waiting for mOpenCvCameraView.getData()!=null");
-			while (mOpenCvCameraView.getData()==null){
-            	try
-				{
-					Thread.sleep(1000);
-				}
-				catch (InterruptedException e)
-				{
-					e.printStackTrace();
-				}
-            }
-
-			Log.d(TAG,"###### progressDialog.setProgress");
-			
-		    progressDialog.setProgress(10);
-		    
-            byte[] data = mOpenCvCameraView.getData();
-        	try
-			{
-				Thread.sleep(1000);
-			}
-			catch (InterruptedException e)
-			{
-				e.printStackTrace();
-			}
-            Bitmap inputBitmap = BitmapFactory.decodeByteArray(data,0,data.length); //changeBitmapContrastBrightness(,1,0);
-            
-            // 1) devo ruotare la bitmap di 90 gradi in senso orario
-            // l'immagine 3246x2448 deve diventare 2448x3246
-            Matrix matrix = new Matrix();
-            matrix.setRotate(90, 0, 0);
-            Bitmap rotatedBitmap = Bitmap.createBitmap(inputBitmap , 0, 0, inputBitmap.getWidth(), inputBitmap.getHeight(), matrix, true);
-            inputBitmap.recycle();
-            inputBitmap=null;
-            Mat inputMat = new Mat(rotatedBitmap.getHeight(), rotatedBitmap.getWidth(), CvType.CV_8UC4);            
-            Utils.bitmapToMat(rotatedBitmap, inputMat);
-
-            progressDialog.setProgress(20);
-           
-            String imageFile = getTempDirectoryPath()+"/resultImage_"+currentDateandTime+".jpg";
-        	Imgcodecs.imwrite(imageFile, inputMat);
-
-	    	Imgproc.cvtColor(inputMat, inputMat, Imgproc.COLOR_BGR2GRAY);
-        	progressDialog.setProgress(30);        	
-       		Imgproc.GaussianBlur(inputMat, inputMat, new Size(5, 5), 5); //denoise
-       		progressDialog.setProgress(40);        	
-        	Imgproc.adaptiveThreshold(inputMat, inputMat, 255,Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,Imgproc.THRESH_BINARY,11,2);
-       		progressDialog.setProgress(50);
-            imageFile_ocr = getTempDirectoryPath()+"/imageOcr.jpg";
-        	Imgcodecs.imwrite(imageFile_ocr, inputMat);
-        	        	
-        	progressDialog.setProgress(90);
-        	
-        	Intent resultIntent = new Intent();
-        	resultIntent.putExtra("imageFile", imageFile);
-        	resultIntent.putExtra("headerFile", "");
-        	resultIntent.putExtra("imageFileOcr", "");
-        	resultIntent.putExtra("headerFileOcr", "");
-        	resultIntent.putExtra("realSizePixelRatio", 1);
-        	setResult(RESULT_OK, resultIntent);                	
-        	
-        	progressDialog.setProgress(100);
-        	
-			Log.d(TAG,"###### doInBackground finish");
-	
-			return true;
-		
-		}
-		*/																																																								
-	    
 		@SuppressLint("SimpleDateFormat")
 		@Override
 		protected Boolean doInBackground(String... params) {
 			boolean status = true;
 	    	Intent resultIntent = new Intent();
 			Log.d(TAG,"###### IAmABackgroundTask.doInBackground");
-	    	mOpenCvCameraView.FlashlightOFF();
-	        mOpenCvCameraView.disableView();	                
-
-	        Log.d(TAG,"###### waiting for mOpenCvCameraView.getData()!=null");
-			while (mOpenCvCameraView.getData()==null){
-	        	try
-				{
-					Thread.sleep(1000);
-				}
-				catch (InterruptedException e)
-				{
-					e.printStackTrace();
-				}
-	        }
+			// qui devo caricare nell'ImageView l'immagine da file
 
 			Log.d(TAG,"###### progressDialog.setProgress");
-			
-		    progressDialog.setProgress(10);
-		    
-	        byte[] data = mOpenCvCameraView.getData();
-	    	try
-			{
-				Thread.sleep(1000);
-			}
-			catch (InterruptedException e)
-			{
-				e.printStackTrace();
-			}
-	        Bitmap inputBitmap = BitmapFactory.decodeByteArray(data,0,data.length); //changeBitmapContrastBrightness(,1,0);
-	        Bitmap rotatedBitmap = null;
 	        
-	        if(mOpenCvCameraView.getOrientation()==0)
+//		    inputBitmap = BitmapFactory.decodeByteArray(data,0,data.length); //changeBitmapContrastBrightness(,1,0);
+		    progressDialog.setProgress(10);
+
+		    Bitmap rotatedBitmap = null;
+	        
+	        if(inputBitmap.getWidth()>inputBitmap.getHeight()) // devi controllare l'orientamento (width>height) 
 	        {
 		        // 1) devo ruotare la bitmap di 90 gradi in senso orario
 		        // l'immagine da 3246x2448, deve diventare 2448x3246
@@ -900,47 +333,7 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
 	        Utils.bitmapToMat(rotatedBitmap, inputMat);
 	        
 	    	float realSizePixelRatio = 0; // px/mm
-	    	/*
-	        // 1) devo scalare la posizione dei punti
-	        List<Point> corners = new ArrayList<Point>(Arrays.asList(corners2f_snap));            
-	        Iterator<Point> it = corners.iterator();
-	        while (it.hasNext())
-	        {
-	        	Point pt = it.next();
-	        	pt.x = pt.x*rotatedBitmap.getWidth()/mOpenCvCameraView.frameSize.height; //480; // 2448
-	        	pt.y = pt.y*rotatedBitmap.getHeight()/mOpenCvCameraView.frameSize.width ; //800; // 3246
-	        }
 	        
-	                    
-	        progressDialog.setProgress(30);
-	        
-	    	Mat quad = new Mat(rotatedBitmap.getHeight(), rotatedBitmap.getWidth(), CvType.CV_8UC3);    	
-	    	rotatedBitmap.recycle();
-	    	rotatedBitmap=null;
-	    	Mat src_mat = Converters.vector_Point_to_Mat(corners,CvType.CV_32F);
-	    	
-	    	progressDialog.setProgress(40);
-	    	// Corners of the destination image
-	    	List<Point> quad_pts = new ArrayList<Point>();
-	    	quad_pts.add(new Point(0, 0));
-	    	quad_pts.add(new Point(quad.cols(), 0));
-	    	quad_pts.add(new Point(quad.cols(), quad.rows()));
-	    	quad_pts.add(new Point(0, quad.rows()));
-	    	Mat dst_mat = Converters.vector_Point_to_Mat(quad_pts,CvType.CV_32F);
-	    	
-	    	progressDialog.setProgress(50);
-	    	
-	    	float realSizePixelRatio = quad.rows()/297; // px/mm
-
-	    	// Get transformation matrix               	
-	    	Mat transmtx = Imgproc.getPerspectiveTransform(src_mat, dst_mat);
-	    	
-	    	progressDialog.setProgress(60);
-	    	
-	    	// Apply perspective transformation
-	    	Imgproc.warpPerspective(inputMat, quad, transmtx, quad.size());
-	        // Write the image in a file (in jpeg format)
-	    	*/	        
 	        String imageFile = getTempDirectoryPath()+"/resultImage_"+currentDateandTime+".jpg";
 	    	//Imgcodecs.imwrite(imageFile, quad);
 	        Mat finalMat = new Mat();
@@ -948,21 +341,6 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
 	    	Imgcodecs.imwrite(imageFile, finalMat);
 	    	finalMat=null;
 	    	
-	    	String headerFile="";
-	    	/*
-	    	// cerco il logo nell'area in alto (100%,15%)
-	    	Rect roi = new Rect(0,0,(int)(quad.width()),(int)(quad.height()*0.15));
-	   		Mat cropped = new Mat(quad,roi);
-	    	
-	    	String headerFile = getTempDirectoryPath()+"/resultHeader_"+currentDateandTime+".jpg";
-	    	Imgcodecs.imwrite(headerFile, cropped);
-
-	    	Imgproc.cvtColor(quad, quad, Imgproc.COLOR_BGR2GRAY);
-	    	Imgproc.GaussianBlur(quad, quad, new Size(5, 5), 5); //denoise
-	    	Imgproc.adaptiveThreshold(quad, quad, 255,Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,Imgproc.THRESH_BINARY,11,2);
-	        String imageFile_ocr = getTempDirectoryPath()+"/imageOcr.jpg";
-	    	Imgcodecs.imwrite(imageFile_ocr, quad);
-*/
             baseApi = new TessBaseAPI();
 			// DATA_PATH = Path to the storage
 			// lang = for which the language data exists, usually "eng"
@@ -1577,7 +955,7 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
 		    	Imgcodecs.imwrite(headerFile_ocr, cropped);*/
 
 		    	resultIntent.putExtra("imageFile", imageFile);
-		    	resultIntent.putExtra("headerFile", headerFile);
+		    	resultIntent.putExtra("headerFile", "");
 //		    	resultIntent.putExtra("imageFileOcr", imageFile_ocr);
 //		    	resultIntent.putExtra("headerFileOcr", headerFile_ocr);
 		    	resultIntent.putExtra("productRows", finalData.toString());
@@ -1709,20 +1087,8 @@ public class CameraCaptureActivity extends Activity implements CvCameraViewListe
 			return boundRect;					
 		}
 	}
-    
-    public class AutoFocusCallBackImpl implements Camera.AutoFocusCallback {
-        @Override
-        public void onAutoFocus(boolean success, Camera camera) {
-//            bIsAutoFocused = success; //update the flag used in onKeyDown()
-            bIsAutoFocusStarted = false;
-            Log.i(TAG, "Inside autofocus callback. autofocused="+success);
-            //play the autofocus sound
-            //MediaPlayer.create(MyJavaCameraView.this, R.raw.auto_focus).start();
-        }
-    } 
-    
+
     /* ABBYY */
-    
     
     private OcrRect GetText(Bitmap bitmap, Rect roi) throws Exception
     {

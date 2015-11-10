@@ -1,5 +1,8 @@
 package it.cimino;
 
+import it.cimino.CameraCaptureActivity.AutoFocusCallBackImpl;
+import it.ciminotrack.R;
+
 import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -8,9 +11,11 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Rect;
 import android.hardware.Camera;
+import android.hardware.Camera.AutoFocusCallback;
 import android.hardware.Camera.Parameters;
 import android.hardware.Camera.PictureCallback;
 import android.hardware.Camera.Size;
+import android.media.MediaPlayer;
 import android.util.AttributeSet;
 import android.util.Log;
 
@@ -20,7 +25,7 @@ public class MyJavaCameraView extends PortraitCameraView implements PictureCallb
     private static final String TAG = "Cimino::MyJavaCameraView";
     private String mPictureFileName;
     private byte[] takenImageData;
-    private CameraCaptureActivity parent;
+    private CameraCaptureActivity parent;     
 
     public MyJavaCameraView(Context context, AttributeSet attrs) {
         super(context, attrs);        
@@ -28,13 +33,13 @@ public class MyJavaCameraView extends PortraitCameraView implements PictureCallb
     
     public void setDefaultParameters()
     {
-    	mCamera.enableShutterSound(true);
+    	//mCamera.enableShutterSound(true);
     	
     	Log.d(TAG,"Antibanding: "+mCamera.getParameters().getAntibanding());
     	Log.d(TAG,"AutoExposureLock: "+mCamera.getParameters().getAutoExposureLock());
     	Log.d(TAG,"ExposureCompensation: "+mCamera.getParameters().getExposureCompensation());
     	Log.d(TAG,"FocalLength: "+mCamera.getParameters().getFocalLength());
-    	/*if(mCamera.getParameters().isVideoStabilizationSupported())
+    	if(mCamera.getParameters().isVideoStabilizationSupported())
     	{
     		mCamera.getParameters().setVideoStabilization(true);
     	}
@@ -45,9 +50,20 @@ public class MyJavaCameraView extends PortraitCameraView implements PictureCallb
     	if(mCamera.getParameters().isAutoWhiteBalanceLockSupported())
     	{
     		mCamera.getParameters().setAutoWhiteBalanceLock(true);
-    	}
-    	*/
-    	mCamera.getParameters().setSceneMode(Camera.Parameters.SCENE_MODE_BARCODE);
+    	}    	
+    	
+    	//mCamera.getParameters().setSceneMode(Camera.Parameters.SCENE_MODE_PARTY);
+    	//Camera.Parameters.SCENE_MODE_PARTY
+    }
+    
+    public Camera.Parameters getParameters()
+    {
+    	return mCamera.getParameters();
+    }
+    
+    public void setParameters(Camera.Parameters params)
+    {
+    	mCamera.setParameters(params);
     }
     
     public List<String> getEffectList() {
@@ -83,18 +99,26 @@ public class MyJavaCameraView extends PortraitCameraView implements PictureCallb
         return mCamera.getParameters().getPictureSize();
     }
 
+    public int getOrientation()
+    {
+    	return rotation;
+    }
+    
     public void initParent(CameraCaptureActivity parent)
     {
     	this.parent = parent;
     }
     
     public void takePicture(final String fileName ) {
+        	
         Log.i(TAG, "Taking picture");
         this.mPictureFileName = fileName;
         
+        //mCamera.stopPreview();
+        
         // Postview and jpeg are sent in the same buffers if the queue is not empty when performing a capture.
         // Clear up buffers to avoid mCamera.takePicture to be stuck because of a memory issue
-        mCamera.setPreviewCallback(null);
+        //mCamera.setPreviewCallback(null);
 
         // PictureCallback is implemented by the current class
         mCamera.takePicture(null, null, this);
@@ -105,8 +129,12 @@ public class MyJavaCameraView extends PortraitCameraView implements PictureCallb
     	if(mCamera!=null)
     	{
         	Camera.Parameters params = mCamera.getParameters();
-            params.setFlashMode(Parameters.FLASH_MODE_ON);
-            mCamera.setParameters(params);
+        	try{
+	            params.setFlashMode(Parameters.FLASH_MODE_TORCH);
+	            mCamera.setParameters(params);
+        	}catch(Exception e){
+        		Log.d(TAG, "FLASH_MODE_TORCH unsupported");
+        	}
     	}
     }
 
@@ -114,15 +142,14 @@ public class MyJavaCameraView extends PortraitCameraView implements PictureCallb
     {
     	if(mCamera!=null)
     	{
-	    	Camera.Parameters params = mCamera.getParameters();
-	        params.setFlashMode(Parameters.FLASH_MODE_OFF);
-	        mCamera.setParameters(params);
+    		try{
+		    	Camera.Parameters params = mCamera.getParameters();
+		        params.setFlashMode(Parameters.FLASH_MODE_OFF);
+		        mCamera.setParameters(params);
+	    	}catch(Exception e){
+	    		Log.d(TAG, "FLASH_MODE_OFF unsupported");
+	    	}	        
     	}
-    }
-    
-    public void initAutofocusCallback()
-    {
-    	mCamera.autoFocus(parent.autofocusCallback);
     }
     
     public void setFocusArea(List<Camera.Area> focusAreas)
@@ -136,38 +163,6 @@ public class MyJavaCameraView extends PortraitCameraView implements PictureCallb
     public byte[] getData()
     {
     	return takenImageData;
-    }
-    
-    public void submitFocusAreaRect(final Rect touchRect)
-    {    	
-        Camera.Parameters cameraParameters = mCamera.getParameters();
-
-        if (cameraParameters.getMaxNumFocusAreas() == 0)
-        {
-            return;
-        }
-
-        // Convert from View's width and height to +/- 1000
- 
-        Rect focusArea = new Rect();
-
-        focusArea.set(touchRect.left * 2000 / this.getWidth() - 1000, 
-                          touchRect.top * 2000 / this.getHeight() - 1000,
-                          touchRect.right * 2000 / this.getWidth() - 1000,
-                          touchRect.bottom * 2000 / this.getHeight() - 1000);
-
-        // Submit focus area to camera
-
-        ArrayList<Camera.Area> focusAreas = new ArrayList<Camera.Area>();
-        focusAreas.add(new Camera.Area(focusArea, 1000));
-
-        cameraParameters.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
-        cameraParameters.setFocusAreas(focusAreas);
-        mCamera.setParameters(cameraParameters);
-
-        // Start the autofocus operation
-
-        initAutofocusCallback();
     }
     
     @SuppressLint("SimpleDateFormat")
@@ -185,10 +180,15 @@ public class MyJavaCameraView extends PortraitCameraView implements PictureCallb
             fos.write(data);
             fos.close();            
             parent.doBackgroundTask();
-            
+            parent.bIsPictureTaking = false;            
         } catch (java.io.IOException e) {
             Log.e(TAG, "Exception in photoCallback", e);
         }
     }
+
+	public void autoFocus(AutoFocusCallBackImpl autoFocusCallBack)
+	{
+    	mCamera.autoFocus(autoFocusCallBack);		
+	}
     
 }
