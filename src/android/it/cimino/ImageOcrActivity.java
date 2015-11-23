@@ -9,6 +9,7 @@ import java.net.URLConnection;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
@@ -55,38 +56,37 @@ import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Matrix;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.util.Log;
 import android.view.WindowManager;
-import android.widget.ImageView;
 import android.widget.Toast;
 
 public class ImageOcrActivity extends Activity{
     private static final String TAG = "Cimino::ImageOCR";
+    private static final boolean DEBUG = false;
 
-    private ImageView selected_photo;
-    private Bitmap inputBitmap;
+    //private ImageView selected_photo;
     private ProgressDialog progressDialog;
     @SuppressLint("SimpleDateFormat")
 	private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
-    private String currentDateandTime = "";
+//    private String currentDateandTime = "";
     private String currentFileName  = "";
-    boolean bIsPictureTaking = false; 
     private TessBaseAPI baseApi = null;
     private Client restClient;
     private String abbyLanguage = "Italian";
     private Vector<String> abbyyArgList;
-    private String charWhiteList = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890'.,:/|-àèìòùé";
+    private String charWhiteList = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890'.,:/^-àèìòùé+=-"; // |
     private String charWhiteListLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-      
+//    private static final float BYTES_PER_PX = 4.0f;
+	private IAmABackgroundTask bktask = new IAmABackgroundTask();
+	//private Mat collage;
+    
     public ImageOcrActivity() {
-        Log.i(TAG, "Instantiated new " + this.getClass());   
+        if (DEBUG) Log.d(TAG, "Instantiated new " + this.getClass());   
         ClientSettings.setupProxy();
 		
 		restClient = new Client();
@@ -114,11 +114,11 @@ public class ImageOcrActivity extends Activity{
 		String appId = ClientSettings.APPLICATION_ID;
 		String password = ClientSettings.PASSWORD;
 		if (appId.isEmpty() || password.isEmpty()) {
-			System.out.println("Error: No application id and password are specified.");
-			System.out.println("Please specify them in ClientSettings.java.");
+			if (DEBUG) System.out.println("Error: No application id and password are specified.");
+			if (DEBUG) System.out.println("Please specify them in ClientSettings.java.");
 			return false;
 		}
-		return false; //true;
+		return false;
 	}
 	
     @Override
@@ -140,7 +140,7 @@ public class ImageOcrActivity extends Activity{
             switch (status) {
                 case LoaderCallbackInterface.SUCCESS:
                 {
-                    Log.i(TAG, "OpenCV loaded successfully");
+                    if (DEBUG) Log.d(TAG, "OpenCV loaded successfully");
                 } break;
                 default:
                 {
@@ -149,51 +149,75 @@ public class ImageOcrActivity extends Activity{
             }
         }
     };
-    
+   
     /** Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        Log.i(TAG, "called onCreate");
+    	if (DEBUG) Log.d(TAG, "called onCreate");
         super.onCreate(savedInstanceState);
-        
-        Bundle extras = getIntent().getExtras(); 
+
+        Bundle extras = getIntent().getExtras();
         currentFileName = extras.getString("filepath");
-        
+        		
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         setContentView(R.layout.ocr_view);
-        selected_photo = (ImageView) findViewById(R.id.selected_photo);
-        File imgFile = new File(currentFileName);
-        
-        Bitmap myBitmap = BitmapFactory.decodeFile(imgFile.getAbsolutePath());
-        
-        selected_photo.setImageBitmap(myBitmap);
-                
-		Log.d(TAG,"###### new ProgressDialog");
+
+		if (DEBUG) Log.d(TAG,"###### new ProgressDialog");
 		progressDialog = new ProgressDialog(ImageOcrActivity.this);
 		progressDialog.setMessage("Attendere, elaborazione in corso...");
 		progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
 		progressDialog.setProgress(0);  	    	
 		progressDialog.setMax(100);        
 		progressDialog.setCancelable(false);
-		Log.d(TAG,"###### progressDialog.show()");
-    	progressDialog.show();           	    
+		if (DEBUG) Log.d(TAG,"###### progressDialog.show()");
+    	progressDialog.show();     
     	
-    	currentDateandTime = sdf.format(new Date());
-    	currentFileName = getTempDirectoryPath() + "/sample_picture_" + currentDateandTime + ".jpg";
+        //selected_photo = (ImageView) findViewById(R.id.selected_photo);
 
-		Log.d(TAG,"###### mOpenCvCameraView.takePicture start");
-        bIsPictureTaking = true;  //set it to true to avoid onKeyDown dispatching during taking picture. it may be time-consuming
-        this.doBackgroundTask();
-		Log.d(TAG,"###### mOpenCvCameraView.takePicture end");
-		
-    }
+/*        File imgFile = new File(currentFileName.replace("file:", ""));        
 
-    public void doBackgroundTask()
-    {
-		Log.d(TAG,"###### IAmABackgroundTask().execute() start");
-    	new IAmABackgroundTask().execute();
-    	Log.d(TAG,"###### IAmABackgroundTask().execute() end");
+    	BitmapFactory.Options options = new BitmapFactory.Options();
+    	options.inJustDecodeBounds = true;
+    	BitmapFactory.decodeFile(imgFile.getAbsolutePath(),options);    	
+    	
+    	float imageHeight = options.outHeight;
+    	float imageWidth = options.outWidth;
+    	String imageMimeType = options.outMimeType;
+    	
+    	Log.d("ScaleBeforeLoad", "w, h, type: " + imageWidth + ", " + imageHeight + ", " + imageMimeType);
+    	Log.d("ScaleBeforeLoad", "estimated memory required in MB: " + imageWidth * imageHeight * BYTES_PER_PX / MemUtils.BYTES_IN_MB);
+
+        if( (imageWidth * imageHeight * BYTES_PER_PX / MemUtils.BYTES_IN_MB) > MemUtils.megabytesFree())
+        {
+        	options.inJustDecodeBounds = false;
+        	options.inSampleSize = 2;	        	
+        	inputBitmap =  BitmapFactory.decodeFile(imgFile.getAbsolutePath(),options);
+        	
+        }
+        else
+        {
+            inputBitmap =  BitmapFactory.decodeFile(imgFile.getAbsolutePath());
+        }
+        
+//        if(inputBitmap.getWidth()>inputBitmap.getHeight()) // devi controllare l'orientamento (width>height) 
+        if(imageWidth>imageHeight) // devi controllare l'orientamento (width>height) 
+        {
+	        // 1) devo ruotare la bitmap di 90 gradi in senso orario
+	        // l'immagine da 3246x2448, deve diventare 2448x3246        	
+	        Matrix matrix = new Matrix();
+	        matrix.setRotate(90, 0, 0);
+            Bitmap rotateBitmap = Bitmap.createBitmap(inputBitmap, 0, 0,inputBitmap.getWidth(), inputBitmap.getHeight(), matrix, true);
+	        inputBitmap = rotateBitmap;
+		}
+		*/	        			
+        //currentDateandTime = sdf.format(new Date());
+    	//currentFileName = getTempDirectoryPath() + "/sample_picture_" + currentDateandTime + ".jpg";        
+        
+    	if (DEBUG) Log.d(TAG,"###### IAmABackgroundTask().execute() start");
+    	//new IAmABackgroundTask().execute();
+    	bktask.execute();
+    	if (DEBUG) Log.d(TAG,"###### IAmABackgroundTask().execute() end");
     }
     
     @Override
@@ -210,10 +234,10 @@ public class ImageOcrActivity extends Activity{
     {
         super.onResume();
         if (!OpenCVLoader.initDebug()) {
-            Log.d(TAG, "Internal OpenCV library not found. Using OpenCV Manager for initialization");
+        	if (DEBUG) Log.d(TAG, "Internal OpenCV library not found. Using OpenCV Manager for initialization");
             OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_0_0, this, mLoaderCallback);
         } else {
-            Log.d(TAG, "OpenCV library found inside package. Using it!");
+        	if (DEBUG) Log.d(TAG, "OpenCV library found inside package. Using it!");
             mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
         }
     }
@@ -223,7 +247,11 @@ public class ImageOcrActivity extends Activity{
     	if ( progressDialog!=null && progressDialog.isShowing() ){
             progressDialog.dismiss();
         }
+    	bktask.cancel(true);
+    	this.finish();
     }
+    
+    
     
     private String getTempDirectoryPath() 
     {
@@ -267,7 +295,7 @@ public class ImageOcrActivity extends Activity{
         cache.mkdirs();
         return cache.getAbsolutePath();
     }    
-        
+
     
     class IAmABackgroundTask extends AsyncTask<String, Integer, Boolean> {
     	
@@ -278,192 +306,351 @@ public class ImageOcrActivity extends Activity{
     	    }
     	    return (int) l;
     	}
-    	
+
 		@Override
 		protected void onPreExecute() {
-		    Log.d(TAG,"###### IAmABackgroundTask.onPreExecute");
+			if (DEBUG) Log.d(TAG,"###### IAmABackgroundTask.onPreExecute");
 		}
 		
 		@Override
 		protected void onPostExecute(Boolean result) {
-			Log.d(TAG,"###### IAmABackgroundTask.onPostExecute");
+			if (DEBUG) Log.d(TAG,"###### IAmABackgroundTask.onPostExecute");
 
 		    if (ImageOcrActivity.this != null) {
 	        	if ( progressDialog!=null && progressDialog.isShowing() ){
 	                progressDialog.dismiss();
-	                ImageOcrActivity.this.finish();
 	            }
+                ImageOcrActivity.this.finish();
 	    	}
-		
+		    
 		}
 		
-		@SuppressLint("SimpleDateFormat")
+		@SuppressWarnings("unused")
 		@Override
-		protected Boolean doInBackground(String... params) {
+		protected Boolean doInBackground(String... params) {			
+			            
+	        File imgFile = new File(currentFileName.replace("file:", "").replace("\n", ""));        
+			
 			boolean status = true;
 	    	Intent resultIntent = new Intent();
-			Log.d(TAG,"###### IAmABackgroundTask.doInBackground");
-			// qui devo caricare nell'ImageView l'immagine da file
-
-			Log.d(TAG,"###### progressDialog.setProgress");
+	    	if (DEBUG) Log.d(TAG,"###### IAmABackgroundTask.doInBackground");
+	        	        
+	        Mat inputMat = new Mat();	    	
+	        String imageFile = getTempDirectoryPath()+"/resultImage.jpg";
+	        Mat src_inputMat = Imgcodecs.imread(imgFile.getAbsolutePath());
+	        if (DEBUG) Imgcodecs.imwrite(imageFile, src_inputMat);
 	        
-//		    inputBitmap = BitmapFactory.decodeByteArray(data,0,data.length); //changeBitmapContrastBrightness(,1,0);
-		    progressDialog.setProgress(10);
-
-		    Bitmap rotatedBitmap = null;
-	        
-	        if(inputBitmap.getWidth()>inputBitmap.getHeight()) // devi controllare l'orientamento (width>height) 
+	        if (src_inputMat.cols()>src_inputMat.rows())
 	        {
-		        // 1) devo ruotare la bitmap di 90 gradi in senso orario
-		        // l'immagine da 3246x2448, deve diventare 2448x3246
-		        Matrix matrix = new Matrix();
-		        matrix.setRotate(90, 0, 0);
-		        rotatedBitmap = Bitmap.createBitmap(inputBitmap , 0, 0, inputBitmap.getWidth(), inputBitmap.getHeight(), matrix, true);
-		        inputBitmap.recycle();
-		        inputBitmap=null;
+		        Core.transpose(src_inputMat, inputMat);
+		        Core.flip(inputMat, inputMat, 1);
 	        }
 	        else
 	        {
-	        	rotatedBitmap = inputBitmap;
+		        inputMat = Imgcodecs.imread(imgFile.getAbsolutePath());
 	        }
+	        src_inputMat.release();
+	        src_inputMat=null;	        	
 	        
-	        progressDialog.setProgress(20);
-
-	        Mat inputMat = new Mat(rotatedBitmap.getHeight(), rotatedBitmap.getWidth(), CvType.CV_8UC3);            
-	        Utils.bitmapToMat(rotatedBitmap, inputMat);
+	        progressDialog.setProgress(1);
 	        
 	    	float realSizePixelRatio = 0; // px/mm
 	        
-	        String imageFile = getTempDirectoryPath()+"/resultImage_"+currentDateandTime+".jpg";
-	    	//Imgcodecs.imwrite(imageFile, quad);
-	        Mat finalMat = new Mat();
-	        Imgproc.cvtColor(inputMat, finalMat, Imgproc.COLOR_BGR2RGB);
-	    	Imgcodecs.imwrite(imageFile, finalMat);
-	    	finalMat=null;
-	    	
             baseApi = new TessBaseAPI();
-			// DATA_PATH = Path to the storage
-			// lang = for which the language data exists, usually "eng"
-			//baseApi.init(DATA_PATH, lang);
-            //baseApi.setPageSegMode(TessBaseAPI.OEM_TESSERACT_CUBE_COMBINED);
-            baseApi.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO_OSD);
-            baseApi.setPageSegMode(TessBaseAPI.PageSegMode.PSM_SINGLE_LINE);
-            baseApi.setDebug(true);
+	        progressDialog.setProgress(10);
 			baseApi.init(getFileDirectoryPath(), "ita"); // /tessdata/ita.traineddata
+            baseApi.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO_OSD);
+            baseApi.setDebug(false);
 			baseApi.setVariable(TessBaseAPI.VAR_CHAR_WHITELIST, charWhiteListLetters);
 			baseApi.setVariable(TessBaseAPI.VAR_CHAR_BLACKLIST, "\\s");
+	        progressDialog.setProgress(11);
 			
-			progressDialog.setProgress(30);
 	    	Imgproc.cvtColor(inputMat, inputMat, Imgproc.COLOR_BGR2GRAY);
-			Mat OriginalBW = inputMat.clone();
+	        progressDialog.setProgress(12);
+			Mat OriginalBW = inputMat.clone();    	
+	        progressDialog.setProgress(13);
 			Mat OriginalBW_copy = inputMat.clone();
-			Mat OriginalBW_copy2 = inputMat.clone();
+	        progressDialog.setProgress(14);
+			Mat OriginalBW_copy2 = inputMat.clone(); // new Mat(inputMat,new Rect(0,0,inputMat.cols(),inputMat.rows()/2));
+	        progressDialog.setProgress(15);
 	    	Imgproc.GaussianBlur(inputMat, inputMat, new Size(5, 5), 5); //denoise
+	        progressDialog.setProgress(16);
 	    	Imgproc.medianBlur(inputMat, inputMat, 5); 
-	    	Imgproc.adaptiveThreshold(inputMat, inputMat, 255, Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY,11,5);
-	    	Imgcodecs.imwrite( getTempDirectoryPath()+"/0-imageOcr_adaptivetresh.jpg", inputMat);
-	    	Imgproc.morphologyEx(inputMat, inputMat, Imgproc.MORPH_OPEN, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(1,5)));
-	    	Imgproc.morphologyEx(inputMat, inputMat, Imgproc.MORPH_OPEN, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(5,1)));
-	    	Imgproc.morphologyEx(inputMat, inputMat, Imgproc.MORPH_OPEN, Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(5,5)));		    		
-	    	Imgcodecs.imwrite( getTempDirectoryPath()+"/1-imageOcr_adaptivetresh_morph.jpg", inputMat);
-    
-//	    	Imgproc.morphologyEx(inputMat, inputMat, Imgproc.MORPH_OPEN, Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(3,3)));		    		
-//	    	Imgproc.morphologyEx(inputMat, inputMat, Imgproc.MORPH_OPEN, Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(3,3)));		    		
-//	        progressDialog.setProgress(40);
+	        progressDialog.setProgress(17);
+	    	Imgproc.adaptiveThreshold(inputMat, inputMat, 254, Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY,15,5);
+	        progressDialog.setProgress(18);
 	    	
-	    	String imageFile_ocr = getTempDirectoryPath()+"/imageOcr.jpg";
-	    	Imgcodecs.imwrite(imageFile_ocr, inputMat);	    	
-    	
+			Mat Inv_OriginalBW = new Mat();
+//    		Mat invertcolormatrix= new Mat(OriginalBW.rows(),OriginalBW.cols(), OriginalBW.type(), new Scalar(255,255,255));
+//    		Core.subtract(invertcolormatrix, Ocropped, Inv_Ocropped);    		
+//    		Core.invert(Ocropped, Inv_Ocropped);
+			Core.bitwise_not(OriginalBW, Inv_OriginalBW);
+	    	Imgproc.threshold(Inv_OriginalBW, Inv_OriginalBW, 160, 255, Imgproc.THRESH_BINARY);
+			if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/INV_bitwise_not.jpg", Inv_OriginalBW);
+	    	Imgproc.dilate(Inv_OriginalBW, Inv_OriginalBW, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3,3)));
+	    	Imgproc.erode(Inv_OriginalBW, Inv_OriginalBW, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3,3)));
+			if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/INV_erode_dilate.jpg", Inv_OriginalBW);
+	    	Imgproc.GaussianBlur(Inv_OriginalBW, Inv_OriginalBW, new Size(5, 5), 5); //denoise
+			if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/INV_GaussianBlur5x5.jpg", Inv_OriginalBW);
+	    	Imgproc.threshold(Inv_OriginalBW, Inv_OriginalBW, 127, 255, Imgproc.THRESH_BINARY);
+			if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/INV_threshold127.jpg", Inv_OriginalBW);
+
+	    	String imageFile_ocr = getTempDirectoryPath()+"/0-imageOcr.jpg";
+	    	if (DEBUG) Imgcodecs.imwrite(imageFile_ocr, inputMat);	    	
+	        progressDialog.setProgress(19);
+
+	    	Mat inputMat_morph = new Mat();
+	    	Imgproc.GaussianBlur(inputMat, inputMat_morph, new Size(5, 5), 5); //denoise
+	    	Imgproc.medianBlur(inputMat_morph, inputMat_morph, 5); 
+	    	progressDialog.setProgress(20);
+	    	if (DEBUG) Imgcodecs.imwrite( getTempDirectoryPath()+"/1-imageOcr_tresh_blur.jpg", inputMat);
+//			double mean = Core.mean(inputMat).val[0];
+//			if (DEBUG) Log.d(TAG,"mean: "+mean);
+			Imgproc.threshold(inputMat_morph, inputMat_morph, 248, 255, Imgproc.THRESH_BINARY); // +Imgproc.THRESH_OTSU
+			progressDialog.setProgress(21);
+			if (DEBUG) Imgcodecs.imwrite( getTempDirectoryPath()+"/2-imageOcr_tresh_new.jpg", inputMat_morph);
+			
+//	    	Imgproc.morphologyEx(inputMat_morph, inputMat_morph, Imgproc.MORPH_OPEN, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(1,3)));
+//	    	Imgproc.morphologyEx(inputMat_morph, inputMat_morph, Imgproc.MORPH_OPEN, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3,1)));
+//	    	Imgproc.morphologyEx(inputMat_morph, inputMat_morph, Imgproc.MORPH_OPEN, Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(3,3)));
+	    	Imgproc.dilate(inputMat_morph, inputMat_morph, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3,3)), new Point(-1,-1),2);
+			if (DEBUG) Imgcodecs.imwrite( getTempDirectoryPath()+"/3-imageOcr_tresh_new_dilate.jpg", inputMat_morph);
+				        
 	    	Rect prodottoTitleRect = null;
+	    	Rect articoloTitleRect = null;
 	    	Rect lottoTitleRect = null;
 	    	Rect scadenzaTitleRect = null;
 	    	
+	    	//collage = new Mat(inputMat.rows(),inputMat.cols(),CvType.CV_8U);
 			Mat sobel = new Mat();
+//			Mat sobel_dilated = new Mat();
 			Mat thresh = new Mat();
-			Mat thresh_dilate = new Mat();
 
-			Imgproc.Sobel(inputMat, sobel, CvType.CV_8U, 1, 0, 3, 1, 0, Core.BORDER_DEFAULT);			
-			Imgproc.Sobel(sobel, sobel, CvType.CV_8U, 0, 1, 3, 1, 0, Core.BORDER_DEFAULT);
-			Imgcodecs.imwrite(getTempDirectoryPath()+"/11-image_sobel.jpg", sobel);	    
-			Imgproc.erode(sobel, sobel, Imgproc.getStructuringElement(Imgproc.MORPH_CROSS, new Size(3,3)));
-			Imgcodecs.imwrite(getTempDirectoryPath()+"/22-image_sobel_erode_3x3.jpg", sobel);	    			
-			Imgproc.dilate(sobel, sobel, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3,3)),new Point(-1,-1), 8);
-			Imgproc.dilate(sobel, sobel, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(5,1)),new Point(-1,-1), 8);
-			Imgcodecs.imwrite(getTempDirectoryPath()+"/33-image_sobelxy_dilated.jpg", sobel);	    
+			Imgproc.Sobel(inputMat_morph, sobel, CvType.CV_8U, 1, 0, 3, 1, 0, Core.BORDER_DEFAULT); 
+	        progressDialog.setProgress(22);
+			Imgproc.Sobel(sobel, sobel, CvType.CV_8U, 0, 1, 3, 1, 0, Core.BORDER_DEFAULT); 
+	        progressDialog.setProgress(23);
+			if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/11-sobel.jpg", sobel);	    
+			Imgproc.erode(sobel, sobel, Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(3,3)));
+	        progressDialog.setProgress(24);
+			if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/22-sobel_erode_3x3.jpg", sobel);	 
+			if (sobel.cols()>1500)
+			{
+				Imgproc.dilate(sobel, thresh, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(5,3)),new Point(-1,-1), 9);
+			}
+			else
+			{
+				Imgproc.dilate(sobel, thresh, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3,3)),new Point(-1,-1), 9);
+			}
+//	        progressDialog.setProgress(23);
+//			Imgproc.dilate(sobel, sobel, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(5,1)),new Point(-1,-1), 8);
+	        progressDialog.setProgress(25);
+//			if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/33-image_sobelxy_dilated.jpg", sobel_dilated);	    
+			if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/33-sobelxy_dilated.jpg", thresh);	    
 			
-	    	Imgproc.medianBlur(sobel, sobel, 3); 
-	    	Imgproc.GaussianBlur(sobel, sobel, new Size(5, 5), 5); //denoise
-			double mean = Core.mean(sobel).val[0]*2; // *3
+	    	/*Imgproc.medianBlur(sobel_dilated, sobel_dilated, 3);
+	        progressDialog.setProgress(25);	    	
+	    	Imgproc.GaussianBlur(sobel_dilated, sobel_dilated, new Size(7, 1), 5); //denoise
+			double mean = Core.mean(sobel_dilated).val[0]*2; // *3
 			Log.d(TAG,"mean: "+mean);
+	        progressDialog.setProgress(26);			
 //			Imgproc.threshold(sobel, thresh, Core.mean(sobel).val[0]/2, 255, Imgproc.THRESH_BINARY+Imgproc.THRESH_OTSU);
-			Imgproc.threshold(sobel, thresh, (mean>255 ? 255 : mean), 255, Imgproc.THRESH_BINARY); // +Imgproc.THRESH_OTSU
-			Imgcodecs.imwrite(getTempDirectoryPath()+"/44-image_sobel_thresh.jpg", thresh);
+			Imgproc.threshold(sobel_dilated, thresh, (mean>255 ? 255 : mean), 255, Imgproc.THRESH_BINARY); // +Imgproc.THRESH_OTSU
+			if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/44-image_sobel_thresh.jpg", thresh);
+	        progressDialog.setProgress(27);*/
 			
-			Imgproc.morphologyEx(thresh, thresh_dilate, Imgproc.MORPH_CLOSE, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(61,1) ));
-			Imgcodecs.imwrite(getTempDirectoryPath()+"/55-image_morphologyEx.jpg", thresh_dilate);
-			
-	    	// trovo tutte le aree contenenti possibili elementi testuali
-	    	List<Rect> textBoxes = detectTextBoxes(thresh_dilate,OriginalBW_copy,1);
+			/*
+			Mat intersect = new Mat();
+			Mat _inv = new Mat();
+			Core.bitwise_not(inputMat, _inv);
+			Core.bitwise_and(thresh, _inv, intersect);
+			if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/3-imageOcr_intersect.jpg", intersect);
+	        */
+//			Imgproc.morphologyEx(thresh, thresh_dilate, Imgproc.MORPH_CLOSE, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(41,1) ));
+
+			if (DEBUG) Log.d(TAG,"detectTextBoxes(thresh,OriginalBW_copy2,1)");
+	    	List<Rect> textBoxesOthers = detectTextBoxes(thresh,OriginalBW_copy2,1); // lo uso per trovare lotto e scadenza	  
 	    	
-	    	List<Rect> textBoxesOthers = detectTextBoxes(thresh,OriginalBW_copy2,2); // lo uso per trovare lotto e scadenza	    	
-	    	
-	    	List<OcrRect> ocrTextBoxes = new ArrayList<OcrRect>();
 	    	Iterator<Rect> lb = textBoxesOthers.iterator();
-	    	int boxes_count = textBoxesOthers.size();
-	    	double step = (double)35/(double)(boxes_count*2);
-	    	double current_progress = 30;
-	    	//int _count =0;
-	    	// qui cerco la descrizione, lotto e scadenza
-	    	while(lb.hasNext())
+//	    	Iterator<Rect> _lb = textBoxes.iterator();
+	    	//int boxes_count = textBoxesOthers.size();
+			progressDialog.setProgress(30);	   
+			double _step = (double)15/(double)textBoxesOthers.size();
+			double current_progress=30;
+	    	// ***************************** qui cerco la descrizione ***********************************************
+			if (DEBUG) Log.d(TAG,"Inizio la ricerca delle parole descrizione lotto e scadenza.");
+	    	//Log.d(TAG,"Inizio la ricerca della colonna descrizione.");
+	    	boolean force_exit = false; 
+	    	int search_count = 0;
+	    	// primo ciclo: cerco le etichette delle colonne della tabella (codice articolo, nome prodotto, lotto e scadenza)
+	    	Rect roi;
+	    	Mat cropped = new Mat();
+	    	Mat Ocropped = new Mat();
+	    	Mat Inv_Ocropped = new Mat();
+			Mat thresh_dilate_cut = new Mat();
+	    	Bitmap bitmap = null;
+	    	Bitmap Obitmap = null;
+	    	Bitmap Inv_Obitmap = null;
+	    	String recognizedText;
+	    	int confidence;
+	    	String OrecognizedText;
+	    	int Oconfidence;
+	    	String Inv_OrecognizedText;
+	    	int Inv_Oconfidence;
+	    	String stringToFind;
+	    	String OstringToFind;
+			String Inv_OstringToFind; 
+			JSONObject finalData;
+    		int index ;
+    		Rect leftColumn;
+    		int newX;
+    		int widthIncrease;
+	    	boolean stessaLinea_lotto = false;
+	    	boolean stessaLinea_scadenza = false;
+	    	
+	    	while(lb.hasNext() && (prodottoTitleRect==null || scadenzaTitleRect==null || lottoTitleRect==null || articoloTitleRect==null) && !force_exit)
 	    	{
-	    		Rect roi = lb.next();
-	    		Mat cropped = new Mat(inputMat,roi);        	    	
-	    		Mat Ocropped = new Mat(OriginalBW,roi);        	    	
-	    		//Imgproc.rectangle(OriginalBW, roi.tl(), roi.br(), new Scalar(0,0,0));
+	    		roi = lb.next();
+	    		if (prodottoTitleRect!=null)
+	    		{
+		    		if (roi.y<(prodottoTitleRect.y-(prodottoTitleRect.height*2))) // limito la ricerca fino ad un certo punto sopra descrizione
+		    		{
+		    			force_exit = true;
+		    		}
+	    			
+	    		}
+	    		cropped = new Mat(inputMat,roi);        	    	
+	    		if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/search_"+search_count+".jpg", cropped);
+	    		Ocropped = new Mat(OriginalBW,roi);        	    	
+	    		if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/Osearch_"+search_count+".jpg", Ocropped);
+	    		Inv_Ocropped = new Mat(Inv_OriginalBW,roi);  
+	    		if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/Inv_Osearch_"+search_count+".jpg", Inv_Ocropped);
+	    		search_count++;
+	    		
+                bitmap = Bitmap.createBitmap(cropped.cols(), cropped.rows(), Bitmap.Config.ARGB_8888);
+                Utils.matToBitmap(cropped, bitmap);              
                 
-                Bitmap bitmap = Bitmap.createBitmap(cropped.cols(), cropped.rows(), Bitmap.Config.ARGB_8888);
-                Utils.matToBitmap(cropped, bitmap);
-                //Imgcodecs.imwrite(getTempDirectoryPath()+"/crop_"+_count+".jpg", cropped);
-                Bitmap Obitmap = Bitmap.createBitmap(Ocropped.cols(), Ocropped.rows(), Bitmap.Config.ARGB_8888);
+                Obitmap = Bitmap.createBitmap(Ocropped.cols(), Ocropped.rows(), Bitmap.Config.ARGB_8888);
                 Utils.matToBitmap(Ocropped, Obitmap);
-                //Imgcodecs.imwrite(getTempDirectoryPath()+"/Ocrop_"+_count+".jpg", Ocropped);
-                //_count++;
+
+                Inv_Obitmap = Bitmap.createBitmap(Inv_Ocropped.cols(), Inv_Ocropped.rows(), Bitmap.Config.ARGB_8888);
+                Utils.matToBitmap(Inv_Ocropped, Inv_Obitmap);
                 
 				baseApi.setImage(bitmap);
-				String recognizedText = baseApi.getUTF8Text();
-				int confidence = baseApi.meanConfidence();
+				recognizedText = baseApi.getUTF8Text().replace("\n", "");
+				confidence = baseApi.meanConfidence();
+				bitmap.recycle();
+				bitmap=null;
 
 				baseApi.setImage(Obitmap);
-				String OrecognizedText = baseApi.getUTF8Text();
-				int Oconfidence = baseApi.meanConfidence();
-				
-				Log.d(TAG,"roi: "+roi.x+","+roi.y+","+roi.width+","+roi.height);
-				Log.d(TAG,"Only letters ROI confidence: "+confidence+" - OCR:"+recognizedText);
-				Log.d(TAG,"Only letters ROI Oconfidence: "+Oconfidence+" - OOCR:"+OrecognizedText);
+				OrecognizedText = baseApi.getUTF8Text().replace("\n", "");
+				Oconfidence = baseApi.meanConfidence();
+				Obitmap.recycle();
+				Obitmap=null;
 
-				String stringToFind = Cimino.toSlug(recognizedText.toLowerCase(Locale.ITALIAN));
-				String OstringToFind = Cimino.toSlug(OrecognizedText.toLowerCase(Locale.ITALIAN));
+				baseApi.setImage(Inv_Obitmap);
+				Inv_OrecognizedText = baseApi.getUTF8Text().replace("\n", "");
+				Inv_Oconfidence = baseApi.meanConfidence();
+				Inv_Obitmap.recycle();
+				Inv_Obitmap=null;				
+				
+				if (DEBUG) Log.d(TAG,"roi ("+search_count+"): "+roi.x+","+roi.y+","+roi.width+","+roi.height);
+				if (DEBUG) Log.d(TAG,"Only letters ROI confidence: "+confidence+" - OCR:"+recognizedText);
+				if (DEBUG) Log.d(TAG,"Only letters ROI Oconfidence: "+Oconfidence+" - OOCR:"+OrecognizedText);
+				if (DEBUG) Log.d(TAG,"Only letters ROI Inv_Oconfidence: "+Inv_Oconfidence+" - Inv_OOCR:"+Inv_OrecognizedText);
+
+				stringToFind = Cimino.toSlug(recognizedText.toLowerCase(Locale.ITALIAN));
+				OstringToFind = Cimino.toSlug(OrecognizedText.toLowerCase(Locale.ITALIAN));
+				Inv_OstringToFind = Cimino.toSlug(Inv_OrecognizedText.toLowerCase(Locale.ITALIAN));
 				
 				if (
 						stringToFind.indexOf("descrizione")>-1 || 
 						StringSimilarity.similarity(stringToFind, "descrizione")>=0.6 ||
 						StringSimilarity.similarity(stringToFind, "cod descrizione")>=0.6 ||
-						StringSimilarity.similarity(stringToFind, "descrizione articolo")>=0.6
+						StringSimilarity.similarity(stringToFind, "descrizione articolo")>=0.6 ||
+						StringSimilarity.similarity(stringToFind, "doscriziono")>=0.6
 					)
 				{
 					prodottoTitleRect = roi;
-					Log.d(TAG,"Colonna Descrizione trovata!");
+					if (DEBUG) Imgproc.rectangle(OriginalBW_copy2, prodottoTitleRect.tl(), prodottoTitleRect.br(), new Scalar(100,100,100),3);					
+					if (DEBUG) Log.d(TAG,"Colonna Descrizione trovata!");
+					
 				}
 				else if (
 						OstringToFind.indexOf("descrizione")>-1 || 
 						StringSimilarity.similarity(OstringToFind, "descrizione")>=0.6 ||
 						StringSimilarity.similarity(OstringToFind, "cod I descrizione")>=0.6 ||
-						StringSimilarity.similarity(OstringToFind, "descrizione articolo")>=0.6
+						StringSimilarity.similarity(OstringToFind, "descrizione articolo")>=0.6 ||
+						StringSimilarity.similarity(OstringToFind, "doscriziono")>=0.6
+						
 					)
 				{
 					prodottoTitleRect = roi;
-					Log.d(TAG,"Colonna Descrizione trovata!");
-				}			
+					if (DEBUG) Imgproc.rectangle(OriginalBW_copy2, prodottoTitleRect.tl(), prodottoTitleRect.br(), new Scalar(100,100,100),3);
+					if (DEBUG) Log.d(TAG,"Colonna Descrizione trovata!");
+				}
+				else if (
+						Inv_OstringToFind.indexOf("descrizione")>-1 || 
+						StringSimilarity.similarity(Inv_OstringToFind, "descrizione")>=0.6 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "cod I descrizione")>=0.6 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "descrizione articolo")>=0.6 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "doscriziono")>=0.6
+						
+					)
+				{
+					prodottoTitleRect = roi;
+					if (DEBUG) Imgproc.rectangle(OriginalBW_copy2, prodottoTitleRect.tl(), prodottoTitleRect.br(), new Scalar(100,100,100),3);
+					if (DEBUG) Log.d(TAG,"Colonna Descrizione trovata!");
+				}				
+				else if (
+						stringToFind.indexOf("codice articolo")>-1 || 
+						stringToFind.indexOf("n.")>-1 ||
+						StringSimilarity.similarity(stringToFind, "codice articolo")>=0.6 ||
+						StringSimilarity.similarity(stringToFind, "codicearticolo")>=0.6 ||
+						StringSimilarity.similarity(stringToFind, "articolo")>=0.6 ||
+						StringSimilarity.similarity(stringToFind, "cod.")>=0.6 ||
+						StringSimilarity.similarity(stringToFind, "cod.art.")>=0.6 ||
+						StringSimilarity.similarity(stringToFind, "codice")>=0.6
+					)
+				{
+					articoloTitleRect = roi;
+					if (DEBUG) Imgproc.rectangle(OriginalBW_copy2, articoloTitleRect.tl(), articoloTitleRect.br(), new Scalar(100,100,100),3);
+					if (DEBUG) Log.d(TAG,"Colonna Codice Articolo trovata!");
+					
+				}
+				else if (
+						OstringToFind.indexOf("codice articolo")>-1 ||
+						OstringToFind.indexOf("n.")>-1 ||
+						StringSimilarity.similarity(OstringToFind, "codice articolo")>=0.6 ||
+						StringSimilarity.similarity(OstringToFind, "codicearticolo")>=0.6 ||
+						StringSimilarity.similarity(OstringToFind, "articolo")>=0.6 ||
+						StringSimilarity.similarity(OstringToFind, "cod.")>=0.6 ||
+						StringSimilarity.similarity(OstringToFind, "cod.art.")>=0.6 ||
+						StringSimilarity.similarity(OstringToFind, "codice")>=0.6
+						
+					)
+				{
+					articoloTitleRect = roi;
+					if (DEBUG) Imgproc.rectangle(OriginalBW_copy2, articoloTitleRect.tl(), articoloTitleRect.br(), new Scalar(100,100,100),3);
+					if (DEBUG) Log.d(TAG,"Colonna Codice Articolo trovata!");
+				}		
+				else if (
+						Inv_OstringToFind.indexOf("codice articolo")>-1 ||
+						Inv_OstringToFind.indexOf("n.")>-1 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "codice articolo")>=0.6 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "codicearticolo")>=0.6 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "articolo")>=0.6 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "cod.")>=0.6 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "cod.art.")>=0.6 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "codice")>=0.6
+						
+					)
+				{
+					articoloTitleRect = roi;
+					if (DEBUG) Imgproc.rectangle(OriginalBW_copy2, articoloTitleRect.tl(), articoloTitleRect.br(), new Scalar(100,100,100),3);
+					if (DEBUG) Log.d(TAG,"Colonna Codice Articolo trovata!");
+				}				
+				/*****/
 				else if ( 
 						stringToFind.indexOf("lotto")>-1 ||
 						stringToFind.indexOf("lono")>-1 || 
@@ -475,7 +662,7 @@ public class ImageOcrActivity extends Activity{
 						StringSimilarity.similarity(stringToFind, "loro")>=0.6
 					)
 				{
-					Log.d(TAG,"scadenza StringSimilarity.similarity: "+StringSimilarity.similarity(stringToFind, "scadenza"));
+					if (DEBUG) Log.d(TAG,"scadenza StringSimilarity.similarity: "+StringSimilarity.similarity(stringToFind, "scadenza"));
 					if (
 							stringToFind.indexOf("scad")>-1 || 
 							stringToFind.indexOf("seed")>-1 || 
@@ -491,13 +678,14 @@ public class ImageOcrActivity extends Activity{
 							StringSimilarity.similarity(stringToFind, "scadenza")>=0.6
 						)
 					{
-//						lottoScadenzaTitleRect = roi;
-						Log.d(TAG,"Campo Lotto e Scadenza trovato!");						
+//							lottoScadenzaTitleRect = roi;
+						if (DEBUG) Log.d(TAG,"Campo Lotto e Scadenza trovato!");						
 					}
 					else
 					{
 						lottoTitleRect = roi;
-						Log.d(TAG,"Campo Lotto trovato!");						
+						if (DEBUG) Imgproc.rectangle(OriginalBW_copy2, lottoTitleRect.tl(), lottoTitleRect.br(), new Scalar(100,100,100),3);
+						if (DEBUG) Log.d(TAG,"Campo Lotto trovato!");						
 					}
 				}
 				else if ( 
@@ -511,7 +699,7 @@ public class ImageOcrActivity extends Activity{
 						StringSimilarity.similarity(OstringToFind, "loro")>=0.6
 					)
 				{
-					Log.d(TAG,"scadenza StringSimilarity.similarity: "+StringSimilarity.similarity(OstringToFind, "scadenza"));
+					if (DEBUG) Log.d(TAG,"scadenza StringSimilarity.similarity: "+StringSimilarity.similarity(OstringToFind, "scadenza"));
 					if (
 							OstringToFind.indexOf("scad")>-1 || 
 							OstringToFind.indexOf("seed")>-1 || 
@@ -527,15 +715,53 @@ public class ImageOcrActivity extends Activity{
 							StringSimilarity.similarity(OstringToFind, "scadenza")>=0.6
 						)
 					{
-//						lottoScadenzaTitleRect = roi;
-						Log.d(TAG,"Campo Lotto e Scadenza trovato!");						
+//							lottoScadenzaTitleRect = roi;
+						if (DEBUG) Log.d(TAG,"Campo Lotto e Scadenza trovato!");						
 					}
 					else
 					{
 						lottoTitleRect = roi;
-						Log.d(TAG,"Campo Lotto trovato!");						
+						if (DEBUG) Imgproc.rectangle(OriginalBW_copy2, lottoTitleRect.tl(), lottoTitleRect.br(), new Scalar(100,100,100),3);
+						if (DEBUG) Log.d(TAG,"Campo Lotto trovato!");						
 					}
-				}				
+				}	
+				else if ( 
+						Inv_OstringToFind.indexOf("lotto")>-1 || 
+						Inv_OstringToFind.indexOf("lono")>-1 || 
+						Inv_OstringToFind.indexOf("loùo")>-1 || 						
+						Inv_OstringToFind.indexOf("loro")>-1 || 						
+						StringSimilarity.similarity(Inv_OstringToFind, "lotto")>=0.6 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "lono")>=0.6 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "loùo")>=0.6 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "loro")>=0.6
+					)
+				{
+					if (DEBUG) Log.d(TAG,"scadenza StringSimilarity.similarity: "+StringSimilarity.similarity(OstringToFind, "scadenza"));
+					if (
+							Inv_OstringToFind.indexOf("scad")>-1 || 
+							Inv_OstringToFind.indexOf("seed")>-1 || 
+							Inv_OstringToFind.indexOf("sced")>-1 || 
+							Inv_OstringToFind.indexOf("sead")>-1 || 
+							Inv_OstringToFind.indexOf("scad.")>-1 || 
+							Inv_OstringToFind.indexOf("scadenza")>-1 ||
+							StringSimilarity.similarity(Inv_OstringToFind, "scad")>=0.6 ||
+							StringSimilarity.similarity(Inv_OstringToFind, "seed")>=0.6 ||
+							StringSimilarity.similarity(Inv_OstringToFind, "sced")>=0.6 ||
+							StringSimilarity.similarity(Inv_OstringToFind, "sead")>=0.6 ||
+							StringSimilarity.similarity(Inv_OstringToFind, "scad.")>=0.6 ||
+							StringSimilarity.similarity(Inv_OstringToFind, "scadenza")>=0.6
+						)
+					{
+//							lottoScadenzaTitleRect = roi;
+						if (DEBUG) Log.d(TAG,"Campo Lotto e Scadenza trovato!");						
+					}
+					else
+					{
+						lottoTitleRect = roi;
+						if (DEBUG) Imgproc.rectangle(OriginalBW_copy2, lottoTitleRect.tl(), lottoTitleRect.br(), new Scalar(100,100,100),3);
+						if (DEBUG) Log.d(TAG,"Campo Lotto trovato!");						
+					}
+				}					
 				else if ( 
 						stringToFind.indexOf("scad")>-1 || 
 						stringToFind.indexOf("seed")>-1 || 
@@ -552,7 +778,7 @@ public class ImageOcrActivity extends Activity{
 						
 					)
 				{
-					Log.d(TAG,"lotto StringSimilarity.similarity: "+StringSimilarity.similarity(stringToFind, "lotto"));
+					if (DEBUG) Log.d(TAG,"lotto StringSimilarity.similarity: "+StringSimilarity.similarity(stringToFind, "lotto"));
 					if (
 							stringToFind.indexOf("lotto")>-1 || 
 							stringToFind.indexOf("lono")>-1 || 
@@ -564,13 +790,14 @@ public class ImageOcrActivity extends Activity{
 							StringSimilarity.similarity(stringToFind, "loro")>=0.6
 						)
 					{
-//						lottoScadenzaTitleRect = roi;
-						Log.d(TAG,"Campo Lotto e Scadenza trovato!");						
+//							lottoScadenzaTitleRect = roi;
+						if (DEBUG) Log.d(TAG,"Campo Lotto e Scadenza trovato!");						
 					}
 					else
 					{
 						scadenzaTitleRect = roi;
-						Log.d(TAG,"Campo Scadenza trovato!");						
+						if (DEBUG) Imgproc.rectangle(OriginalBW_copy2, scadenzaTitleRect.tl(), scadenzaTitleRect.br(), new Scalar(100,100,100),3);
+						if (DEBUG) Log.d(TAG,"Campo Scadenza trovato!");						
 					}
 				}
 				else if ( 
@@ -589,7 +816,7 @@ public class ImageOcrActivity extends Activity{
 						
 					)
 				{
-					Log.d(TAG,"lotto StringSimilarity.similarity: "+StringSimilarity.similarity(OstringToFind, "lotto"));
+					if (DEBUG) Log.d(TAG,"lotto StringSimilarity.similarity: "+StringSimilarity.similarity(OstringToFind, "lotto"));
 					if (
 							OstringToFind.indexOf("lotto")>-1 || 
 							OstringToFind.indexOf("lono")>-1 || 
@@ -601,276 +828,560 @@ public class ImageOcrActivity extends Activity{
 							StringSimilarity.similarity(OstringToFind, "loro")>=0.6
 						)
 					{
-//						lottoScadenzaTitleRect = roi;
-						Log.d(TAG,"Campo Lotto e Scadenza trovato!");						
+//							lottoScadenzaTitleRect = roi;
+						if (DEBUG) Log.d(TAG,"Campo Lotto e Scadenza trovato!");						
 					}
 					else
 					{
 						scadenzaTitleRect = roi;
-						Log.d(TAG,"Campo Scadenza trovato!");						
+						if (DEBUG) Imgproc.rectangle(OriginalBW_copy2, scadenzaTitleRect.tl(), scadenzaTitleRect.br(), new Scalar(100,100,100),3);
+						if (DEBUG) Log.d(TAG,"Campo Scadenza trovato!");						
 					}
 				}
+				else if ( 
+						Inv_OstringToFind.indexOf("scad")>-1 || 
+						Inv_OstringToFind.indexOf("seed")>-1 || 
+						Inv_OstringToFind.indexOf("sced")>-1 || 
+						Inv_OstringToFind.indexOf("sead")>-1 || 
+						Inv_OstringToFind.indexOf("scad.")>-1 || 
+						Inv_OstringToFind.indexOf("scadenza")>-1 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "scad")>=0.6 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "seed")>=0.6 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "sced")>=0.6 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "sead")>=0.6 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "scad.")>=0.6 ||
+						StringSimilarity.similarity(Inv_OstringToFind, "scadenza")>=0.6
+						
+					)
+				{
+					if (DEBUG) Log.d(TAG,"lotto StringSimilarity.similarity: "+StringSimilarity.similarity(OstringToFind, "lotto"));
+					if (
+							Inv_OstringToFind.indexOf("lotto")>-1 || 
+							Inv_OstringToFind.indexOf("lono")>-1 || 
+							Inv_OstringToFind.indexOf("loùo")>-1 || 						
+							Inv_OstringToFind.indexOf("loro")>-1 || 						
+							StringSimilarity.similarity(Inv_OstringToFind, "lotto")>=0.6 ||
+							StringSimilarity.similarity(Inv_OstringToFind, "lono")>=0.6 ||
+							StringSimilarity.similarity(Inv_OstringToFind, "loùo")>=0.6 ||
+							StringSimilarity.similarity(Inv_OstringToFind, "loro")>=0.6
+						)
+					{
+//							lottoScadenzaTitleRect = roi;
+						if (DEBUG) Log.d(TAG,"Campo Lotto e Scadenza trovato!");						
+					}
+					else
+					{
+						scadenzaTitleRect = roi;
+						if (DEBUG) Imgproc.rectangle(OriginalBW_copy2, scadenzaTitleRect.tl(), scadenzaTitleRect.br(), new Scalar(100,100,100),3);
+						if (DEBUG) Log.d(TAG,"Campo Scadenza trovato!");						
+					}
+				}				
 
 				cropped = null;
 				bitmap = null;
-    	    	current_progress+=step;
-    	    	progressDialog.setProgress((int)current_progress);
-	    		
+	    	    	current_progress+=_step;
+	    	    	progressDialog.setProgress((int)current_progress);	    			
 	    	}
+	    	progressDialog.setProgress(45);
+            baseApi.setPageSegMode(TessBaseAPI.PageSegMode.PSM_SINGLE_LINE);
 			baseApi.setVariable(TessBaseAPI.VAR_CHAR_WHITELIST, charWhiteList);
-			Iterator<Rect> lb2 = textBoxes.iterator();
-	    	while(lb2.hasNext())
-	    	{
-	    		Rect roi = lb2.next();
-	    		
-	    		if (!roi.equals(prodottoTitleRect))
-	    		{
-		    		Mat cropped = new Mat(inputMat,roi);        	    	
-	                
-	                Bitmap bitmap = Bitmap.createBitmap(cropped.cols(), cropped.rows(), Bitmap.Config.ARGB_8888);
-	                Utils.matToBitmap(cropped, bitmap);
-	                
-					baseApi.setImage(bitmap);
-					String recognizedText = baseApi.getUTF8Text();
-					int confidence = baseApi.meanConfidence();
-					
-					Log.d(TAG,"Full ROI confidence: "+confidence+" - OCR:"+recognizedText);
-
-					if (recognizedText.length()>=6 && recognizedText.length()<=60 && confidence>30)
-					{
-						ocrTextBoxes.add(new OcrRect(roi, recognizedText, confidence));
-					}
-					cropped = null;
-					bitmap = null;
-	    	    	current_progress+=step;
-	    	    	progressDialog.setProgress((int)current_progress);
-	    		}
-	    	}
-
-	    	Imgproc.GaussianBlur(inputMat, inputMat, new Size(5, 5), 5); //denoise
-	    	Imgproc.medianBlur(inputMat, inputMat, 5); 
-			Imgcodecs.imwrite( getTempDirectoryPath()+"/1b-imageOcr_tresh_blur.jpg", inputMat);
-//			double mean = Core.mean(inputMat).val[0];
-//			Log.d(TAG,"mean: "+mean);
-			Imgproc.threshold(inputMat, inputMat, 247, 255, Imgproc.THRESH_BINARY); // +Imgproc.THRESH_OTSU
-			Imgcodecs.imwrite( getTempDirectoryPath()+"/2-imageOcr_tresh_new.jpg", inputMat);
-			Imgproc.dilate(inputMat, inputMat, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3,3)), new Point(-1,-1),2);
-/*	    	Imgproc.morphologyEx(inputMat, inputMat, Imgproc.MORPH_OPEN, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(1,5)));
-	    	Imgproc.morphologyEx(inputMat, inputMat, Imgproc.MORPH_OPEN, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(5,1)));
-	    	Imgproc.morphologyEx(inputMat, inputMat, Imgproc.MORPH_OPEN, Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(5,5)));*/
-			Imgcodecs.imwrite( getTempDirectoryPath()+"/2b-imageOcr_tresh_new_dilate.jpg", inputMat);
+						
+	    	progressDialog.setProgress(46);
 	    	
 	    	// fuori da questo ciclo devo trovare sulla stessa linea di desxcrizione lotto e scadenza
 	    	// basta controllare se sono "sotto" cioe' y>ydescrizione e 
 	    	// se non ci sono allora lotto e scadenza sono nell'area descrizione prodotto
-	    	JSONObject finalData = new JSONObject();
+	    	finalData = new JSONObject();
 	    	if (prodottoTitleRect!=null)
 	    	{
+	    		List<Rect> codiciArticoloList = new ArrayList<Rect>();
+	    		// cerco tutti i codici articolo - se sono riuscito a trovare la colonna
+    			if (articoloTitleRect!=null)
+    			{
+    				// secondo ciclo: cerco tutte le aree realtiva a un codice prodotto
+    	    		lb = textBoxesOthers.iterator();
+    	    		Rect _roi;
+    	    		while (lb.hasNext())
+    	    		{
+    	    			_roi = lb.next();
+			    		if (		    				
+			    				(_roi.y)>(articoloTitleRect.y+articoloTitleRect.height) 
+			    				&& 
+			    				(
+			    						(_roi.x<=articoloTitleRect.x && _roi.x+_roi.width>=articoloTitleRect.x+articoloTitleRect.width) ||
+			    						(_roi.x<=articoloTitleRect.x && _roi.x+_roi.width<=articoloTitleRect.x+articoloTitleRect.width && _roi.x+_roi.width>articoloTitleRect.x)
+	    						)
+			    			)
+			    		{
+			    			codiciArticoloList.add(_roi);
+			    			if (DEBUG) Imgproc.rectangle(OriginalBW_copy, _roi.tl(), _roi.br(), new Scalar(100,100,100),3);
+			    			if (DEBUG) Imgproc.rectangle(OriginalBW_copy2, _roi.tl(), _roi.br(), new Scalar(100,100,100),3);
+			    		}
+    	    		}
+        			if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/detectTextBoxes_1.jpg", OriginalBW_copy2);
+    			}
+		    	progressDialog.setProgress(47);
 
-		    	boolean stessaLinea_lotto = false;
-		    	boolean stessaLinea_scadenza = false;
 		    	if (lottoTitleRect!=null)
 		    	{
 			    	Rect searchAreaLotto = new Rect(lottoTitleRect.x,prodottoTitleRect.y,lottoTitleRect.width,prodottoTitleRect.height);
 			    	if (intersect_Y(searchAreaLotto, lottoTitleRect))
 			    	{
 			    		stessaLinea_lotto = true;
-			    		lottoTitleRect.x = (int) (lottoTitleRect.x-(lottoTitleRect.width*0.7));
-			    		lottoTitleRect.width = (int) (lottoTitleRect.width+(2*lottoTitleRect.width*0.7));
-			    		Log.d(TAG,"Il campo lotto sta sulla stessa linea di descrizione!");
+			    		lottoTitleRect.x = (int) (lottoTitleRect.x-(lottoTitleRect.width*0.5))+5;
+			    		lottoTitleRect.width = (int) (lottoTitleRect.width+(lottoTitleRect.width*0.5)+(lottoTitleRect.width*0.7));
+			    		if (DEBUG) Log.d(TAG,"Il campo lotto sta sulla stessa linea di descrizione!");
 			    	}
 		    	}
 		    	if (scadenzaTitleRect!=null)
 		    	{
-			    	Rect searchAreaScadenza = new Rect(scadenzaTitleRect.x,prodottoTitleRect.y,scadenzaTitleRect.width,prodottoTitleRect.height);
+			    	Rect searchAreaScadenza = new Rect(scadenzaTitleRect.x,prodottoTitleRect.y,scadenzaTitleRect.width,prodottoTitleRect.height-10);
 			    	if (intersect_Y(searchAreaScadenza, scadenzaTitleRect))
 			    	{
 			    		stessaLinea_scadenza = true;
-//			    		scadenzaTitleRect.x = scadenzaTitleRect.x-10;
-//			    		scadenzaTitleRect.width = lottoTitleRect.width+20;
-			    		Log.d(TAG,"Il campo scadenza sta sulla stessa linea di descrizione!");
+			    		if (DEBUG) Log.d(TAG,"Il campo scadenza sta sulla stessa linea di descrizione!");
 			    	}
 		    	}
+		    	JSONArray jrows = new JSONArray();
 		    	
-		    	JSONArray jrows = new JSONArray();	
-	    		
-	    		// devo ordinarly per y crescente;
-	    		Collections.sort(textBoxes, new Comparator<Rect>(){
-	    		     public int compare(Rect o1, Rect o2){
-	    		         if(o1.y == o2.y)
-	    		             return 0;
-	    		         return o1.y < o2.y ? -1 : 1;
-	    		     }
-	    		});
-	    		
-		    	Iterator<Rect> broi = textBoxes.iterator();
-		    	
-		    	List<Rect> tableHeader = new ArrayList<Rect>();
-		    	//tableHeader.add(productTitleRect);
-		    	
-		    	while(broi.hasNext())
+		    	progressDialog.setProgress(48);
+		    	if (articoloTitleRect==null)
 		    	{
-		    		Rect roi = broi.next();
-		    		if (
-		    				(roi.y>=prodottoTitleRect.y && roi.y<prodottoTitleRect.y+prodottoTitleRect.height/3) ||
-		    				(roi.y<prodottoTitleRect.y && roi.y+roi.height>prodottoTitleRect.y)
-		    			)
+			    	Iterator<Rect> broi = textBoxesOthers.iterator();
+			    	
+			    	List<Rect> tableHeader = new ArrayList<Rect>();
+			    	tableHeader.add(prodottoTitleRect);
+
+			    	// terzo ciclo se articoloTitleRect è null, cerco, se c'è, l'area realtiva all'intestazione di colonna a sinistra di "descrizione"
+			    	Rect __troi;
+			    	while(broi.hasNext())
+			    	{
+			    		__troi = broi.next();
+			    		if (
+			    				((__troi.y>=prodottoTitleRect.y && __troi.y<prodottoTitleRect.y+prodottoTitleRect.height/3) ||
+			    				(__troi.y<prodottoTitleRect.y && __troi.y+__troi.height>prodottoTitleRect.y)) &&
+			    				__troi.x<prodottoTitleRect.x
+			    			)
+			    		{
+			    			tableHeader.add(__troi);
+			    		}
+			    			
+			    	}
+		    		Collections.sort(tableHeader, new Comparator<Rect>(){
+		    		     public int compare(Rect o1, Rect o2){
+		    		         if(o1.x == o2.x)
+		    		             return 0;
+		    		         return o1.x < o2.x ? -1 : 1;
+		    		     }
+		    		});
+		    		
+		    		index = tableHeader.indexOf(prodottoTitleRect);
+		    		leftColumn = new Rect(0,prodottoTitleRect.y,1,prodottoTitleRect.height);
+		    		//Rect rightColumn = new Rect(inputMat.cols()-1,productTitleRect.y,inputMat.cols(),productTitleRect.y+productTitleRect.height);
+		    		if (index>0)
 		    		{
-		    			tableHeader.add(roi);
+		    			leftColumn = tableHeader.get(index-1);
 		    		}
-		    			
+		    		
+		    		newX = (int) (leftColumn.x+leftColumn.width*1.4); //+50%
+		    		if (newX>prodottoTitleRect.x) 
+		    		{
+		    			newX = prodottoTitleRect.x;
+		    		}
+		    		widthIncrease = prodottoTitleRect.x-newX;  
+		    		prodottoTitleRect.width += widthIncrease; //(int) ((rightColumn.x-productTitleRect.x)/1.2); //-20%
+		    		prodottoTitleRect.x = newX;		    		
 		    	}
-	    		Collections.sort(tableHeader, new Comparator<Rect>(){
-	    		     public int compare(Rect o1, Rect o2){
-	    		         if(o1.x == o2.x)
-	    		             return 0;
-	    		         return o1.x < o2.x ? -1 : 1;
-	    		     }
-	    		});
-	    		
-	    		
-	    		int index = tableHeader.indexOf(prodottoTitleRect);
-	    		Rect leftColumn = new Rect(0,prodottoTitleRect.y,1,prodottoTitleRect.y+prodottoTitleRect.height);
-	    		//Rect rightColumn = new Rect(inputMat.cols()-1,productTitleRect.y,inputMat.cols(),productTitleRect.y+productTitleRect.height);
-	    		if (index>0)
-	    		{
-	    			leftColumn = tableHeader.get(index-1);
-	    		}
-	    		
-	    		/*if (index<tableHeader.size())
-	    		{
-	    			rightColumn = tableHeader.get(index+1);
-	    		}*/
-	    		// TODO: verificare con = 3 per inglobare pure i codici prodotto
-	    		int newX = (int) ((leftColumn.x+leftColumn.width)*1.5); //+50%
-	    		int widthIncrease = prodottoTitleRect.x-newX;  
-	    		prodottoTitleRect.width += widthIncrease; //(int) ((rightColumn.x-productTitleRect.x)/1.2); //-20%
-	    		prodottoTitleRect.x = newX;
+		    	else
+		    	{		    		
+		    		newX = (int) ((articoloTitleRect.x+articoloTitleRect.width)*1.1); //+10%
+		    		widthIncrease = prodottoTitleRect.x-newX;  
+		    		prodottoTitleRect.width += widthIncrease; //(int) ((rightColumn.x-productTitleRect.x)/1.2); //-20%
+		    		prodottoTitleRect.x = newX;		    		
+		    	}
+
 	    		//Imgproc.rectangle(OriginalBW, prodottoTitleRect.tl(), prodottoTitleRect.br(), new Scalar(50,50,50),1);
-	    			    			    		
-		    	Iterator<OcrRect> broiBody = ocrTextBoxes.iterator();
-		    	progressDialog.setProgress(65);
-		    	step = (double)25/(double)textBoxes.size();
-		    	current_progress=65;		    	
-		    	int count =0;
-		    	String lotto = "";
-		    	String scadenza = "";
+				Rect final_area = new Rect(prodottoTitleRect.x,prodottoTitleRect.y,sobel.cols()-prodottoTitleRect.x,sobel.rows()-prodottoTitleRect.y);
+		    	Mat OriginalBW_copy_cut = new Mat(OriginalBW_copy,final_area);		    	
+				if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/44-OriginalBW_copy_cut.jpg", OriginalBW_copy_cut);
+		    	Mat sobel_cut = new Mat(sobel,final_area);
+		    	Mat thresh_cut = new Mat(thresh,final_area);
+				Imgproc.dilate(sobel_cut, thresh_dilate_cut, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(19,1)),new Point(-1,-1), 9);
+				Core.bitwise_or(thresh_dilate_cut, thresh_cut, thresh_dilate_cut);
+				Mat thresh_dilate = new Mat(OriginalBW_copy.rows(),OriginalBW_copy.cols(), thresh_dilate_cut.type());
+				Mat dst_roi = thresh_dilate.submat(final_area);
+				thresh_dilate_cut.copyTo(dst_roi);
+				Imgproc.erode(thresh_dilate,thresh_dilate,Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3,3)));
+				Imgproc.dilate(thresh_dilate,thresh_dilate,Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3,3)));
+				if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/55-morphologyEx.jpg", thresh_dilate);
+		        progressDialog.setProgress(49);
+							
+		        if (DEBUG) Log.d(TAG,"detectTextBoxes(thresh_dilate,OriginalBW_copy,2)");
+		    	List<Rect> textBoxes = detectTextBoxes(thresh_dilate,OriginalBW_copy,2);
+    			if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/detectTextBoxes_2.jpg", OriginalBW_copy);
+
+    			thresh_dilate_cut.release();
+    			thresh_dilate_cut=null;
+    			thresh_cut.release();
+    			thresh_cut=null;
+    			sobel.release();
+    			sobel=null;
+    			OriginalBW_copy_cut.release();
+    			OriginalBW_copy_cut=null;
+    			
+		    	//Iterator<OcrRect> broiBody = ocrTextBoxes.iterator();
+		    	Iterator<Rect> broiBody = textBoxes.iterator();
+		    	
+		    	progressDialog.setProgress(50);
+		    	double step = (double)49/(double)textBoxes.size();
+		    	current_progress=50;		    	
+		    	int count = 0;
+		    	String lotto = "nessuno";
+		    	String scadenza = "nessuna";
+		    	// quarto ciclo: cerco i prodotti con lotto e scadenza
+		    	Rect __roi = null;
+		    	List<OcrRect> ocrTextList = null;
+		    	OcrRect BW_OrecognizedText = null;
+		    	OcrRect AD_OrecognizedText = null;
+		    	OcrRect MO_OrecognizedText = null;
+		    	JSONObject jobj = null;
+		    	String recognizedText_lotto = "";
+    			List<OcrRect> ocrTextList_lotto = null;
+				OcrRect BW_recognizedText_lotto = null;
+				OcrRect AD_recognizedText_lotto = null;
+				boolean hasError=false;														
+				String first="";
+				String last ="";
+				String recognizedText_scadenza = "";
+				OcrRect BW_recognizedText_scadenza = null;
+				OcrRect AD_recognizedText_scadenza = null;
+				boolean lottoPresent = false;
+				boolean scadenzaPresent = false;
+				String[] parts = new String[2];
 		    	while(broiBody.hasNext())
 		    	{
-		    		OcrRect Oroi = broiBody.next();
-		    		Rect roi = Oroi.getArea();
-		    		// Possibile eccezione:
-		    		// 0 <= _colRange.start && _colRange.start <= _colRange.end && _colRange.end <= m.cols
-					Log.d(TAG,"OLD - confidence: "+Oroi.getConfidence()+" - OCR:"+Oroi.getText());
-					
-		    		if(roi.width>=0 && roi.height>=0)
+		    		__roi = broiBody.next();					
+		    		if(__roi.width>=0 && __roi.height>=0)
 		    		{
-			    		try{
-		    	    		Mat cropped = new Mat(inputMat,roi);
-		                    
-		                    Bitmap bitmap = Bitmap.createBitmap(cropped.cols(), cropped.rows(), Bitmap.Config.ARGB_8888);
-		                    Utils.matToBitmap(cropped, bitmap);
-		                    
-		                    Bitmap enlargedBitmap = Bitmap.createBitmap(cropped.cols()+50, cropped.rows()+50, Bitmap.Config.ARGB_8888);		                    
-		                    Canvas wideBmpCanvas = new Canvas(enlargedBitmap);
-		                    wideBmpCanvas.drawColor(Color.WHITE);
-		                    wideBmpCanvas.drawBitmap(bitmap, 25, 25, null);
-		                    Mat new_bitmap = new Mat();
-		                    Utils.bitmapToMat(enlargedBitmap, new_bitmap);
+			    		try{	                   
 				    		if (		    				
 //				    				((roi.y+roi.height)>=(prodottoTitleRect.y+prodottoTitleRect.height)) &&  
-				    				((roi.y)>=(prodottoTitleRect.y-prodottoTitleRect.height)) && // TODO: TESTARE: originariente: +prodottoTitleRect.height/3   
+				    				((__roi.y)>=(prodottoTitleRect.y+prodottoTitleRect.height)) && // originariente: +prodottoTitleRect.height/3   
 				    				(
-				    						(roi.x+roi.width>=prodottoTitleRect.x && roi.x+roi.width<=prodottoTitleRect.x+prodottoTitleRect.width) ||
-				    						(roi.x>=prodottoTitleRect.x && roi.x<=prodottoTitleRect.x+prodottoTitleRect.width) ||
-				    						(roi.x<=prodottoTitleRect.x && roi.x+roi.width>=prodottoTitleRect.x+prodottoTitleRect.width)
+				    						(__roi.x+__roi.width>=prodottoTitleRect.x && __roi.x+__roi.width<=prodottoTitleRect.x+prodottoTitleRect.width) ||
+				    						(__roi.x>=prodottoTitleRect.x && __roi.x<=prodottoTitleRect.x+prodottoTitleRect.width) ||
+				    						(__roi.x<=prodottoTitleRect.x && __roi.x+__roi.width>=prodottoTitleRect.x+prodottoTitleRect.width)
 				    				)
 				    			)
 				    		{
-			    	    		Imgcodecs.imwrite(getTempDirectoryPath()+"/cropped_"+(count++)+".jpg", new_bitmap);
-//			    	    		Imgcodecs.imwrite(getTempDirectoryPath()+"/cropped_"+(count++)+".jpg", cropped);
-//			                    OcrRect OrecognizedText = GetText(bitmap,roi);
-			                    OcrRect OrecognizedText = GetText(enlargedBitmap,roi);
-								Log.d(TAG,"----------------------------------------------------");			                    
-			                    String recognizedText = OrecognizedText.getText();
-			                    if (OrecognizedText.getConfidence()<=Oroi.getConfidence())
+				    			ocrTextList = new ArrayList<OcrRect>();
+				    			if (DEBUG) Log.d(TAG,"roi: "+__roi.x+","+__roi.y+","+__roi.width+","+__roi.height);
+				    			__roi = fixRoiBy(__roi,codiciArticoloList);
+				    			//if (DEBUG) Imgproc.rectangle(collage, roi.tl(), roi.br(), new Scalar(255,255,255),-1);
+				    			// originalBW ------------------------------------------------------------------------------------------------------------------			    	    		
+			                    BW_OrecognizedText = GetText(getEnlargedCroppedBitmap(OriginalBW, __roi, count, "BW", false),__roi);
+				    			ocrTextList.add(BW_OrecognizedText);
+			                    if (DEBUG) Log.d(TAG,"BW - confidence: "+BW_OrecognizedText.getConfidence()+" - OCR:"+BW_OrecognizedText.getText().trim());
+				    			// -----------------------------------------------------------------------------------------------------------------------------
+				    			if (!checkAppId())
+				    			{
+					    			// adaptive_threshold ----------------------------------------------------------------------------------------------------------
+				                    AD_OrecognizedText = GetText(getEnlargedCroppedBitmap(inputMat, __roi, count, "AD", false),__roi);
+				                    AD_OrecognizedText.setConfidence(AD_OrecognizedText.getConfidence()+2); // diamo un po' più di importanza alla versione AD
+				                    ocrTextList.add(AD_OrecognizedText);
+				                    if (DEBUG) Log.d(TAG,"AD - confidence: "+AD_OrecognizedText.getConfidence()+" - OCR:"+AD_OrecognizedText.getText().trim());
+				                    //-------------------------------------------------------------------------------------------------------------------------------
+	
+					    			// adaptive_threshold_morph -----------------------------------------------------------------------------------------------------
+				                    MO_OrecognizedText = GetText(getEnlargedCroppedBitmap(inputMat_morph, __roi, count, "MO", false),__roi);
+				                    MO_OrecognizedText.setConfidence(MO_OrecognizedText.getConfidence()); // diamo meno importanza alla versione MO
+				                    ocrTextList.add(MO_OrecognizedText);
+				                    if (DEBUG) Log.d(TAG,"MO - confidence: "+MO_OrecognizedText.getConfidence()+" - OCR:"+MO_OrecognizedText.getText().trim());
+				                    //-------------------------------------------------------------------------------------------------------------------------------
+				    			}
+			                    count++;
+			                    Collections.sort(ocrTextList, new Comparator<OcrRect>(){
+				   	    		     public int compare(OcrRect o1, OcrRect o2){
+				   	    		         if(o1.getConfidence() == o2.getConfidence())
+				   	    		             return 0;
+				   	    		         return o1.getConfidence() > o2.getConfidence() ? -1 : 1;
+				   	    		     }
+			    	    		});			   	    		
+
+/*			                    if (OrecognizedText.getConfidence()<=Oroi.getConfidence())
 			                    {
 			                    	// se non ho miglioramenti mi tengo il valore vecchio
 			                    	// ovvero se il delta di confidence è <=3
-			                    	recognizedText = Oroi.getText();
+			                    	recognizedText = Oroi.getText().trim();
+			                    }*/
+			                    recognizedText = "";
+			                    if(ocrTextList.size()>0)
+			                    {				                    
+			                    	recognizedText = ocrTextList.get(0).getText().trim();
+			                    	if (recognizedText.length()>2)
+			                    	{
+				                    	if (recognizedText.substring(0,2).toLowerCase(Locale.ITALIAN).equals("i ") || recognizedText.substring(0,2).toLowerCase(Locale.ITALIAN).equals("l ") || recognizedText.substring(0,2).toLowerCase(Locale.ITALIAN).equals("1 "))
+				                    	{
+				                    		recognizedText = recognizedText.substring(2);
+				                    	}
+			                    	}
+				                    if (DEBUG) Log.d(TAG,"BEST - confidence: "+ocrTextList.get(0).getConfidence()+" - OCR:"+recognizedText);
+				                    if (DEBUG) Log.d(TAG,"----------------------------------------------------");
 			                    }
-		    					if (recognizedText.indexOf("|")>-1)
+/*		    					if (recognizedText.indexOf("|")>-1)
 		    					{
 		    						String[] tmp = recognizedText.split("\\|");
-		    						recognizedText = tmp[tmp.length-1];
-			    					OrecognizedText.setText(recognizedText);
-		    					}
+		    						recognizedText = tmp[tmp.length-1].trim();
+//			    					OrecognizedText.setText(recognizedText);
+		    					}*/
 			    				if (recognizedText.length()>=6 && recognizedText.length()<=60)
 			    				{
-//				    				Log.d(TAG,"Prodotto: "+recognizedText);
-			    					
-									// devo controllare che sia "in linea" con descrizione
-						    		// se lo sono, allora sono nel caso in cui lotto e scadenza sono le intestazioni della tabella
-						    		// se non lo sono allora si tratta di elementi della descrizione del prodotto
-
-							    	// fuori da questo ciclo devo trovare sulla stessa linea di desxcrizione lotto e scadenza
-							    	// basta controllare se sono "sotto" ciow' y>ydescrizione e 
-							    	// se non ci sono allora lotto e scadenza sono nell'area descrizione prodotto
 					    			try
 									{
 							    		if(stessaLinea_lotto || stessaLinea_scadenza)
 							    		{
-								    		JSONObject jobj = new JSONObject();
+								    		jobj = new JSONObject();
 								    		jobj.put("index", count);
-								    		Log.d(TAG,"Prodotto: "+recognizedText);
+								    		
+											String Tfirst = recognizedText.substring(0, 1);
+/*											if (Tfirst.equals("|"))
+											{
+												recognizedText = recognizedText.substring(1);
+											}*/
+											if (Tfirst.equals("'") || Tfirst.equals(".") || Tfirst.equals(","))
+											{
+												recognizedText = recognizedText.substring(1);
+											}
+								    		
+											if (DEBUG) Log.d(TAG,"Prodotto: "+recognizedText);
 											jobj.put("prodotto", recognizedText);										
 											// qui devo cercare sulla stessa riga a destra lotto e scadenza
 											if (stessaLinea_lotto)
 											{
-												// TODO: devo fare un contronto con imageMat
-												String recognizedText_lotto = findNearestRightSameLine(lottoTitleRect, roi, OriginalBW);
-							    				Log.d(TAG,"Lotto: "+recognizedText_lotto);
-												jobj.put("lotto", recognizedText_lotto);
+												if (DEBUG) Log.d(TAG,"Lotto: ---------------------------------------------------------");
+												recognizedText_lotto = "";
+								    			ocrTextList_lotto = new ArrayList<OcrRect>();
+												BW_recognizedText_lotto = findNearestRightSameLine(lottoTitleRect, __roi, OriginalBW,"LOTT-BW");
+												if (BW_recognizedText_lotto!=null)
+												{
+													ocrTextList_lotto.add(BW_recognizedText_lotto);
+													if (DEBUG) Log.d(TAG,"BW - confidence: "+BW_recognizedText_lotto.getConfidence()+" - OCR:"+BW_recognizedText_lotto.getText().trim());
+												}
+												if (!checkAppId())
+												{
+													AD_recognizedText_lotto = findNearestRightSameLine(lottoTitleRect, __roi, inputMat,"LOTT-AD");
+													if (AD_recognizedText_lotto!=null)
+													{
+														ocrTextList_lotto.add(AD_recognizedText_lotto);
+														if (DEBUG) Log.d(TAG,"AD - confidence: "+AD_recognizedText_lotto.getConfidence()+" - OCR:"+AD_recognizedText_lotto.getText().trim());
+													}
+													/*OcrRect MO_recognizedText_lotto = findNearestRightSameLine(lottoTitleRect, roi, inputMat_morph,"LOTT-MO");												
+													if (MO_recognizedText_lotto!=null)
+													{
+														ocrTextList_lotto.add(MO_recognizedText_lotto);
+														if (DEBUG) Log.d(TAG,"MO - confidence: "+MO_recognizedText_lotto.getConfidence()+" - OCR:"+MO_recognizedText_lotto.getText().trim());
+													}*/
+												}
+							                    Collections.sort(ocrTextList_lotto, new Comparator<OcrRect>(){
+								   	    		     public int compare(OcrRect o1, OcrRect o2){
+								   	    		         if(o1.getConfidence() == o2.getConfidence())
+								   	    		             return 0;
+								   	    		         return o1.getConfidence() > o2.getConfidence() ? -1 : 1;
+								   	    		     }
+							    	    		});			   	    		
+							                    if (ocrTextList_lotto.size()>0)
+							                    {
+							                    	recognizedText_lotto = ocrTextList_lotto.get(0).getText().trim();
+								                    if (DEBUG) Log.d(TAG,"BEST - confidence: "+ocrTextList_lotto.get(0).getConfidence()+" - OCR:"+recognizedText_lotto);
+								                    if (DEBUG) Log.d(TAG,"----------------------------------------------------");
+							                    }
+												if (recognizedText_lotto.length()>=2)
+												{
+													hasError=true;														
+													first = recognizedText_lotto.substring(0, 2).toLowerCase(Locale.ITALIAN);
+													if (DEBUG) Log.d(TAG,"first char: '"+first+"'");
+													if (first.equals("1 ") && recognizedText_lotto.length()>1)
+													{
+														recognizedText_lotto = recognizedText_lotto.substring(2).trim();
+													}
+													while (hasError && recognizedText_lotto.length()>0)
+													{
+														first = recognizedText_lotto.substring(0, 1).toLowerCase(Locale.ITALIAN);
+														if (DEBUG) Log.d(TAG,"first char: '"+first+"'");
+														try{
+															Integer.parseInt(first);
+															hasError=false;
+														}
+														catch(NumberFormatException nfe)
+														{
+															recognizedText_lotto = recognizedText_lotto.substring(1).trim();
+														}
+													}														
+													hasError=true;																												
+													while (hasError && recognizedText_lotto.length()>0)
+													{
+														last = recognizedText_lotto.substring(recognizedText_lotto.length()-1).toLowerCase(Locale.ITALIAN);
+														if (DEBUG) Log.d(TAG,"last char: '"+last+"'");
+														try{
+															Integer.parseInt(last);
+															hasError = false;
+														}
+														catch(NumberFormatException nfe)
+														{
+															recognizedText_lotto = recognizedText_lotto.substring(0,recognizedText_lotto.length()-1).trim();
+														}														
+														
+													}
+												}
+												else
+												{
+													recognizedText_lotto = "nessuno";
+												}
+												if (recognizedText_lotto.trim().length()==1 || recognizedText_lotto.trim().equals(""))
+												{
+													recognizedText_lotto = "nessuno";
+												}
+												if (DEBUG) Log.d(TAG,"Lotto: "+recognizedText_lotto.trim());
+												jobj.put("lotto", recognizedText_lotto.trim());
 											}
 											else
 											{
-												jobj.put("lotto", "");
+												jobj.put("lotto", "nessuno");
 											}
 											if (stessaLinea_scadenza)
 											{
-												// TODO: devo fare un contronto con imageMat
-												String recognizedText_scadenza = findNearestRightSameLine(scadenzaTitleRect, roi, OriginalBW); 
-												Log.d(TAG,"Scadenza: "+recognizedText_scadenza);
+												if (DEBUG) Log.d(TAG,"Scadenza: ---------------------------------------------------------");
+												recognizedText_scadenza = ""; //findNearestRightSameLine(scadenzaTitleRect, roi, OriginalBW).trim().replaceAll("\\s+", "");
+								    			List<OcrRect> ocrTextList_scadenza = new ArrayList<OcrRect>();
+								    			//if (DEBUG) Imgproc.rectangle(collage, roi.tl(), roi.br(), new Scalar(255,255,255));
+								    			
+												BW_recognizedText_scadenza = findNearestRightSameLine(scadenzaTitleRect, __roi, OriginalBW,"SCAD-BW");
+												if (BW_recognizedText_scadenza!=null)
+												{
+													ocrTextList_scadenza.add(BW_recognizedText_scadenza);
+													if (DEBUG) Log.d(TAG,"BW - confidence: "+BW_recognizedText_scadenza.getConfidence()+" - OCR:"+BW_recognizedText_scadenza.getText().trim());
+												}
+												AD_recognizedText_scadenza = findNearestRightSameLine(scadenzaTitleRect, __roi, inputMat,"SCAD-AD");
+												if (AD_recognizedText_scadenza!=null)
+												{
+													ocrTextList_scadenza.add(AD_recognizedText_scadenza);
+													if (DEBUG) Log.d(TAG,"AD - confidence: "+AD_recognizedText_scadenza.getConfidence()+" - OCR:"+AD_recognizedText_scadenza.getText().trim());
+												}
+												/*OcrRect MO_recognizedText_scadenza = findNearestRightSameLine(scadenzaTitleRect, roi, inputMat_morph,"SCAD-MO");												
+												if (MO_recognizedText_scadenza!=null)
+												{
+													ocrTextList_scadenza.add(MO_recognizedText_scadenza);
+													if (DEBUG) Log.d(TAG,"MO - confidence: "+MO_recognizedText_scadenza.getConfidence()+" - OCR:"+MO_recognizedText_scadenza.getText().trim());
+												}*/
+												if (AD_recognizedText_scadenza.getText().split("/").length==2 && BW_recognizedText_scadenza.getText().split("/").length==AD_recognizedText_scadenza.getText().split("/").length)
+												{
+								                    Collections.sort(ocrTextList_scadenza, new Comparator<OcrRect>(){
+									   	    		     public int compare(OcrRect o1, OcrRect o2){
+									   	    		         if(o1.getConfidence() == o2.getConfidence())
+									   	    		             return 0;
+									   	    		         return o1.getConfidence() > o2.getConfidence() ? -1 : 1;
+									   	    		     }
+								    	    		});			   	    															
+												}
+												else
+												{
+								                    Collections.sort(ocrTextList_scadenza, new Comparator<OcrRect>(){
+									   	    		     public int compare(OcrRect o1, OcrRect o2){
+									   	    		         if(o1.getConfidence() == o2.getConfidence())
+									   	    		             return 0;
+									   	    		         return o1.getText().split("/").length > o2.getText().split("/").length ? -1 : 1;
+									   	    		     }
+								    	    		});			   	    															
+													
+												}
+							                    if (ocrTextList_scadenza.size()>0)
+							                    {
+							                    	recognizedText_scadenza = ocrTextList_scadenza.get(0).getText().trim();
+								                    if (DEBUG) Log.d(TAG,"BEST - confidence: "+ocrTextList_scadenza.get(0).getConfidence()+" - OCR:"+recognizedText_scadenza);
+								                    if (DEBUG) Log.d(TAG,"----------------------------------------------------");							                    	
+							                    }												
+												if (recognizedText_scadenza.length()>0)
+												{
+													hasError=true;	
+													first = recognizedText_scadenza.substring(0, 1).toLowerCase(Locale.ITALIAN);
+													if (DEBUG) Log.d(TAG,"first char: "+first);
+													while (hasError && recognizedText_scadenza.length()>0)
+													{
+														first = recognizedText_scadenza.substring(0, 1).toLowerCase(Locale.ITALIAN);
+														try{
+															Integer.parseInt(first);
+															hasError=false;
+														}
+														catch(NumberFormatException nfe)
+														{
+															recognizedText_scadenza = recognizedText_scadenza.substring(1,recognizedText_scadenza.length());
+														}														
+													}
+													hasError=true;	
+													while (hasError && recognizedText_scadenza.length()>0)
+													{
+														try{
+															last = recognizedText_scadenza.substring(recognizedText_scadenza.length()-1).toLowerCase(Locale.ITALIAN);
+															if (DEBUG) Log.d(TAG,"last char: "+last);
+															Integer.parseInt(last);	
+															hasError=false;
+														}
+														catch(NumberFormatException nfe)
+														{
+															recognizedText_scadenza = recognizedText_scadenza.substring(0,recognizedText_scadenza.length()-1);
+														}														
+													}
+													if (recognizedText_scadenza.length()>1)
+													{
+														recognizedText_scadenza = fixYear(recognizedText_scadenza);
+													}
+												}
+												if (recognizedText_scadenza.trim().length()==1 || recognizedText_scadenza.trim().equals(""))
+												{
+													recognizedText_scadenza = "nessuna";
+												}
+												if (DEBUG) Log.d(TAG,"Scadenza: "+recognizedText_scadenza);
 												jobj.put("scadenza", recognizedText_scadenza);
 											}
 											else
 											{
-												jobj.put("scadenza", "");
+												jobj.put("scadenza", "nessuna");
 											}
+											/*jobj.put("usati", "0");
+											jobj.put("quantita", "0");
+											jobj.put("note", "---");*/
+											jobj.put("conforme", "Conforme");
 											jrows.put(jobj);
-											//Imgproc.rectangle(OriginalBW, roi.tl(), roi.br(), new Scalar(100,100,100),1);
-											
+											//Imgproc.rectangle(OriginalBW, roi.tl(), roi.br(), new Scalar(100,100,100),1);											
 							    		}
 							    		else
 							    		{
-							    			// TODO:
 							    			// devo cercare i valori attorno il testo del prodotto, tipicamente al di sotto per ogni riga
 							    			// l'area di OCR se fatta bene dovrebbe gia' inglobare tutto, pertanto nel testo OCR dovrebbe
 							    			// essere presente una stringa tipo: Lotto: 107 Scadenza: 30/09/2015
-											String stringToFind = Cimino.toSlug(recognizedText.toLowerCase(Locale.ITALIAN));
-							    			// devo fare attenzione perche' alternativamente lotto o scadenza potrebbero mancare
-											Log.d(TAG,"lotto StringSimilarity.similarity: "+StringSimilarity.similarity(stringToFind, "lotto"));
-											Log.d(TAG,"scadenza StringSimilarity.similarity: "+StringSimilarity.similarity(stringToFind, "scadenza"));
+//											String stringToFind = Cimino.toSlug(recognizedText.toLowerCase(Locale.ITALIAN)); // .replace("lollo", "lotto")							    			
+											recognizedText = recognizedText.replace("lollo", "Lotto"); // FIX							    			
+											recognizedText = recognizedText.replace("Lollo", "Lotto"); // FIX							    			
+							    			// devo fare attenzione perche' alternativamente lotto o scadenza potrebbero mancare											
 											if ( 
 													(
-														stringToFind.indexOf("lotto")>-1 
-													&&
-														stringToFind.indexOf("scadenza")>-1
+														(
+															recognizedText.indexOf("Lotto")>-1
+//															 || StringSimilarity.similarity(recognizedText, "lotto")>=0.6
+														)
+													||
+														(
+															recognizedText.indexOf("Scadenza")>-1
+//															 || StringSimilarity.similarity(recognizedText, "scadenza")>=0.6
+														)
+														
 													)
 												)
 											{
 
-												Log.d(TAG,"Campo Lotto e Scadenza trovato!");	
+												lottoPresent = recognizedText.indexOf("Lotto")>-1;
+												scadenzaPresent = recognizedText.indexOf("Scadenza")>-1;
+												if (DEBUG) Log.d(TAG,"Campo Lotto e/o Scadenza trovato!");	
 												// estraggo lotto e scadenza per assegnarli al successivo prodotto
 												// dato che la sequenza di lettura dal basso verso l'alto è
 												// lotto-scad
@@ -879,40 +1390,58 @@ public class ImageOcrActivity extends Activity{
 												// prodotto
 												// ...
 												recognizedText = recognizedText.replace("otto", "otto:");
-												recognizedText = recognizedText.replace("casenza", "cadenza:");
+												recognizedText = recognizedText.replace("cadenza", "cadenza:");
 												recognizedText = recognizedText.replace("::",":").replace(": ", ":").trim();
-												Log.d(TAG,"Prodotto: "+recognizedText);
-												String[] parts = recognizedText.split(" ");
-												Log.d(TAG,"parts: "+parts.length);
-												String[] lotto_parts = parts[0].split(":");
-												Log.d(TAG,"lotto parts: "+lotto_parts.length);
-												String[] scad_parts = parts[1].split(":");
-												Log.d(TAG,"scadenza parts: "+scad_parts.length);
-												lotto = lotto_parts[1];
-												scadenza = scad_parts[1];
-												Log.d(TAG,"Lotto: "+lotto+" - Scadenza: "+scadenza);
-												Log.d(TAG,"----------------------------------------------------");
+												first = recognizedText.substring(0, 1);
+												if (!first.equals("L"))
+												{
+													recognizedText = recognizedText.substring(1).trim();
+												}
+/*												if (!first.equals("L"))
+												{
+													recognizedText = recognizedText.substring(1).trim();
+												}*/
+												if (DEBUG) Log.d(TAG,"Prodotto: "+recognizedText);
+												parts = new String[2];
+												if (scadenzaPresent && lottoPresent)
+												{
+													parts = recognizedText.replace("Lotto:", "").split(" Scadenza:");
+												}
+												else if (!lottoPresent && scadenzaPresent)
+												{
+													parts = ("Lotto: "+lotto+" "+recognizedText).replace("Lotto:", "").split(" Scadenza:");
+												}
+												else if(lottoPresent && !scadenzaPresent)
+												{
+													parts = (recognizedText+" Scadenza: "+scadenza).replace("Lotto:", "").split(" Scadenza:");
+												}
+												if (DEBUG) Log.d(TAG,"parts: "+parts.length);
+
+												lotto = parts[0].trim();
+												scadenza = parts[1].trim();
+												if (DEBUG) Log.d(TAG,"RESULT => Lotto: "+lotto+" - Scadenza: "+scadenza);
+												if (DEBUG) Log.d(TAG,"----------------------------------------------------");
 											}
 											else
 											{
-									    		JSONObject jobj = new JSONObject();
+									    		jobj = new JSONObject();
 									    		jobj.put("index", count);												
 												jobj.put("prodotto", recognizedText);												
 												jobj.put("lotto", lotto);												
-												jobj.put("scadenza", scadenza);												
+												jobj.put("scadenza", scadenza);
+												jobj.put("conforme", "Conforme");
+												/*jobj.put("usati", "0");
+												jobj.put("quantita", "0");
+												jobj.put("note", "---");*/												
 												jrows.put(jobj);
-												lotto = "";
-												scadenza = "";
-												//Imgproc.rectangle(OriginalBW, roi.tl(), roi.br(), new Scalar(100,100,100),1);
+												lotto = "nessuno";
+												scadenza = "nessuna";
 											}
 							    		}
 																			
-										cropped = null;
-										bitmap = null;
 									}
 									catch (JSONException e)
 									{
-										// TODO Auto-generated catch block
 										e.printStackTrace();
 									}
 			    				}
@@ -923,13 +1452,12 @@ public class ImageOcrActivity extends Activity{
 			    		}
 			    		catch(CvException cve)
 			    		{
-			    			Log.d(TAG,cve.getLocalizedMessage());
+			    			if (DEBUG) Log.d(TAG,cve.getLocalizedMessage());
 			    			cve.printStackTrace();
 			    		}
 						catch (Exception e1)
 						{
-							Log.d(TAG,e1.getLocalizedMessage());
-							// TODO Auto-generated catch block
+							if (DEBUG) Log.d(TAG,e1.getLocalizedMessage());
 							e1.printStackTrace();
 						}
 		    		}
@@ -940,19 +1468,19 @@ public class ImageOcrActivity extends Activity{
 				}
 				catch (JSONException e)
 				{
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
+		    	baseApi.clear();
 		    	baseApi.end();
 				baseApi=null;	    		
 		        
-				imageFile_ocr = getTempDirectoryPath()+"/9-image_detectLetters.jpg";
-		    	Imgcodecs.imwrite(imageFile_ocr, OriginalBW);	    	
+				//String imageFile_roiMerge = getTempDirectoryPath()+"/9-image_rois.jpg";
+				//if (DEBUG) Imgcodecs.imwrite(imageFile_roiMerge, collage);	    	
 		    	
 		    	//String headerFile_ocr="";
 		    	/*cropped = new Mat(quad,roi);
 		   		String headerFile_ocr = getTempDirectoryPath()+"/headerOcr.jpg";
-		    	Imgcodecs.imwrite(headerFile_ocr, cropped);*/
+		    	if (DEBUG) Imgcodecs.imwrite(headerFile_ocr, cropped);*/
 
 		    	resultIntent.putExtra("imageFile", imageFile);
 		    	resultIntent.putExtra("headerFile", "");
@@ -961,12 +1489,34 @@ public class ImageOcrActivity extends Activity{
 		    	resultIntent.putExtra("productRows", finalData.toString());
 		    	resultIntent.putExtra("realSizePixelRatio", realSizePixelRatio);		    	
 		    	progressDialog.setProgress(100);
-		    	
+		    	progressDialog.dismiss();
+		    	progressDialog=null;
+		    	thresh_dilate.release();
+				thresh_dilate = null;
+		    	prodottoTitleRect = null;
+		    	articoloTitleRect = null;
+		    	lottoTitleRect = null;
+		    	scadenzaTitleRect = null;
+		    	ocrTextList = null;
+		    	BW_OrecognizedText = null;
+		    	AD_OrecognizedText = null;
+		    	MO_OrecognizedText = null;
+		    	jobj = null;
+		    	recognizedText_lotto = null;
+    			ocrTextList_lotto = null;
+				BW_recognizedText_lotto = null;
+				AD_recognizedText_lotto = null;
+				first = null;
+				last = null;
+				recognizedText_scadenza = null;
+				BW_recognizedText_scadenza = null;
+				AD_recognizedText_scadenza = null;
+				jrows=null;
 	    	}
 	    	else
 	    	{	    		
-				imageFile_ocr = getTempDirectoryPath()+"/9-image_detectLetters.jpg";
-		    	Imgcodecs.imwrite(imageFile_ocr, OriginalBW);	    	
+//				imageFile_ocr = getTempDirectoryPath()+"/9-image_detectLetters.jpg";
+//				if (DEBUG) Imgcodecs.imwrite(imageFile_ocr, OriginalBW);	    	
 
 	    		resultIntent.putExtra("imageFile", "");
 	    		resultIntent.putExtra("headerFile", "");
@@ -974,12 +1524,49 @@ public class ImageOcrActivity extends Activity{
 		    	resultIntent.putExtra("realSizePixelRatio", realSizePixelRatio);
 	    		status=false;
 	    	}
-			sobel = null;
+			//sobel_dilated = null;
+	    	thresh.release();
 			thresh = null;
-			thresh_dilate = null;
+			inputMat.release();
+			inputMat=null;
+			inputMat_morph.release();
+			inputMat_morph=null;
+			OriginalBW.release();
+			OriginalBW=null;
+			OriginalBW_copy.release();
+			OriginalBW_copy=null;
+			OriginalBW_copy2.release();
+			OriginalBW_copy2=null;
+	    	roi=null;
+	    	if (cropped!=null) cropped.release();
+	    	cropped=null;
+	    	if (Ocropped!=null) Ocropped.release();
+	    	Ocropped=null;
+	    	if (Inv_Ocropped!=null) Inv_Ocropped.release();
+	    	Inv_Ocropped=null;
+	    	if (thresh_dilate_cut!=null) thresh_dilate_cut.release();
+			thresh_dilate_cut=null;
+	    	if(bitmap!=null) bitmap.recycle();
+	    	bitmap=null;
+	    	if(Obitmap!=null) Obitmap.recycle();
+	    	Obitmap=null;
+	    	if(Inv_Obitmap!=null) Inv_Obitmap.recycle();
+	    	Inv_Obitmap=null;
+	    	recognizedText=null;
+	    	OrecognizedText=null;
+	    	Inv_OrecognizedText=null;
+	    	stringToFind=null;
+	    	OstringToFind=null;
+			Inv_OstringToFind=null; 
+			finalData=null;
+    		leftColumn=null;
 
+
+			//collage=null;
+			//baseApi.clear();
+			//baseApi.end();
 	    	setResult(RESULT_OK, resultIntent);
-			Log.d(TAG,"###### doInBackground finish");
+	    	if (DEBUG) Log.d(TAG,"###### doInBackground finish");
 			return status;
 		}
 		
@@ -988,10 +1575,127 @@ public class ImageOcrActivity extends Activity{
 			return (B.tl().y>=A.tl().y && B.tl().y<=A.br().y) 
 					|| (A.tl().y<=B.br().y && A.tl().y>=B.tl().y);
 		}
+
+		private boolean intersect_X(Rect A, Rect B)
+		{
+			return (B.tl().x>=A.tl().x && B.tl().x<=A.br().x) 
+					|| (A.tl().x<=B.br().x && A.tl().x>=B.tl().x);
+		}
 		
-		private String findNearestRightSameLine(Rect roiColumn, Rect roiRow, Mat image) throws Exception
+		private Rect fixRoiBy(Rect roi, List<Rect> splitters)
+		{
+			Iterator<Rect> it = splitters.iterator();
+			boolean found = false;
+			while (it.hasNext() && !found)
+			{
+				Rect splitter = it.next();
+				if(intersect_X(roi, splitter) && intersect_Y(roi, splitter))
+				{
+					// il 10 vedo se mi aiuta ad evitare la barretta verticale della tabella che viene spesso interpretata per I,1 o |
+					roi = new Rect(splitter.x+splitter.width+15,roi.y+2,(roi.x+roi.width)-(splitter.x+splitter.width),roi.height-4);
+					found=true;
+				}
+			}
+			return roi;
+		}
+		
+		private String fixYear(String data)
 		{			
-			String result = "";
+			if (data.length()>1)
+			{
+				boolean parseError = true;
+				String first = data.substring(0,1).toLowerCase(Locale.ITALIAN).replace("f", "/");
+				while (parseError && data.length()>1)
+				{
+					try
+					{
+						first = data.substring(0,1).toLowerCase(Locale.ITALIAN).replace("f", "/");
+						Integer.parseInt(first);
+						parseError=false;
+					}
+					catch(NumberFormatException nfe)
+					{
+						data = data.substring(1).trim();
+					}
+				}
+				
+			}
+			if (data.length()>1)
+			{
+				boolean parseError = true;
+				String last = data.substring(data.length()-1).toLowerCase(Locale.ITALIAN);
+				while (parseError && data.length()>1)
+				{
+					try
+					{
+						last = data.substring(data.length()-1).toLowerCase(Locale.ITALIAN);
+						Integer.parseInt(last);
+						parseError = false;
+					}
+					catch(NumberFormatException nfe)
+					{
+						data = data.substring(0,data.length()-1).trim();
+					}
+				}				
+			}
+			if (data.length()>1)
+			{
+				data = data.replaceAll("-", "/").replaceAll("\\s","");
+				String[] parts = data.split("/");
+				if (data.length()==8 && parts.length<3)
+				{
+					data = data.substring(0,1)+"/"+data.substring(3,4)+"/20"+data.substring(6,7);
+				}
+				else if (data.length()<8 && parts.length==3)
+				{
+					String year = parts[2];
+					String month = (parts[1].length()==1 ? "0":"")+parts[1];
+					String day = (parts[1].length()==1 ? "0":"")+parts[0];
+					if (year.length()==2)
+					{
+						year="20"+year;
+					}
+					else if(year.length()==1)
+					{
+						Calendar now = Calendar.getInstance();
+						now.add(Calendar.YEAR,1);
+						Date currentDate = now.getTime();
+						java.text.SimpleDateFormat simpleDateFormat = new java.text.SimpleDateFormat("yyyy",Locale.ITALIAN);
+						year = simpleDateFormat.format(currentDate);
+					}			
+					data = day+"/"+month+"/"+year;
+					
+				}
+				else if (data.length()<8 && parts.length==2)
+				{
+					String year = parts[1];
+					String month = (parts[0].length()==1 ? "0":"")+parts[0];
+					
+					if (year.length()==2)
+					{
+						year="20"+year;
+					}
+					else if(year.length()==1)
+					{
+						Calendar now = Calendar.getInstance();
+						now.add(Calendar.YEAR,1);
+						Date currentDate = now.getTime();
+						java.text.SimpleDateFormat simpleDateFormat = new java.text.SimpleDateFormat("yyyy",Locale.ITALIAN);
+						year = simpleDateFormat.format(currentDate);
+					}								
+					data = "01/"+month+"/"+year;
+				}
+				else if(data.length()==8 && parts.length==3)
+				{
+					data = parts[0]+"/"+parts[1]+"/20"+parts[2];
+				}
+			}
+			return data;
+		}
+		
+		private OcrRect findNearestRightSameLine(Rect roiColumn, Rect roiRow, Mat image, String prefix) throws Exception
+		{			
+			OcrRect Oresult = null;
 			if (roiColumn!=null)
 			{
 //				Rect searchArea = new Rect(roiColumn.x-25,roiRow.y-15,roiColumn.width+50,roiRow.height+40);
@@ -1009,14 +1713,14 @@ public class ImageOcrActivity extends Activity{
 	    		Mat cropped = new Mat(image, searchArea);     
                 Bitmap bitmap = Bitmap.createBitmap(cropped.cols(), cropped.rows(), Bitmap.Config.ARGB_8888);
                 Utils.matToBitmap(cropped, bitmap);
-                Imgcodecs.imwrite(getTempDirectoryPath()+"/new_cropped"+roiRow.y+".jpg", cropped);
-                OcrRect Oresult = GetText(bitmap,searchArea);
-                result = Oresult.getText();
-//	    				baseApi.setImage(bitmap);
-//	    				result = baseApi.getUTF8Text();
+                if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/"+prefix+"_cropped_"+roiRow.y+".jpg", cropped);
+                Oresult = GetText(bitmap,searchArea);
+                bitmap.recycle();
+                bitmap=null;
+                cropped.release();
                 cropped = null;
 			}
-			return result;
+			return Oresult;
 		}
 		/*
 		private boolean intersect(Rect A, Rect B)
@@ -1066,23 +1770,24 @@ public class ImageOcrActivity extends Activity{
 			{				
 				MatOfPoint2f contour = new MatOfPoint2f(ci.next().toArray());
 				MatOfPoint2f approx = new MatOfPoint2f();
-				Log.d(TAG,"Area: "+contour.size().area());
 				//double epsilon = Imgproc.arcLength(contour, true) * 0.02;
 				Imgproc.approxPolyDP( contour, approx, 3, true);
 				Rect appRect = Imgproc.boundingRect(new MatOfPoint(approx.toArray()) );
-				if(contour.size().area()>10 && contour.size().area()<600)
+				if (DEBUG) Log.d(TAG,"Area: "+contour.size().area()+" -height: "+appRect.height);
+				if(contour.size().area()>10 && contour.size().area()<1000)
 				{
-					if(appRect.height>10 && appRect.width>10)
+					if(appRect.height>10 && appRect.width>10 && appRect.height<=150)
 					{
 						boundRect.add(appRect);		
-						Imgproc.rectangle(Original, appRect.tl(), appRect.br(), new Scalar(200,200,200),2);						
+						if (DEBUG) Imgproc.rectangle(Original, appRect.tl(), appRect.br(), new Scalar(200,200,200),2);						
 					}
 
 				}
 			}			
-			Imgcodecs.imwrite( getTempDirectoryPath()+"/detectTextBoxes_"+idx+".jpg", Original);
+			if (DEBUG) Imgcodecs.imwrite( getTempDirectoryPath()+"/detectTextBoxes_"+idx+".jpg", Original);
 			ci = null;
 			//element = null;
+			hierachy.release();
 			hierachy = null;
 			return boundRect;					
 		}
@@ -1097,7 +1802,7 @@ public class ImageOcrActivity extends Activity{
         if (checkAppId())
         {
         	String xmlresult = performTextFieldRecognition(bitmap);
-        	Log.d(TAG,"xml: "+xmlresult);
+        	if (DEBUG) Log.d(TAG,"xml: "+xmlresult);
         	if (!xmlresult.equals("gotesseract"))
         	{
             	DocumentBuilder db = DocumentBuilderFactory.newInstance().newDocumentBuilder();
@@ -1125,9 +1830,10 @@ public class ImageOcrActivity extends Activity{
         	// se Abbyy non funziona ricorro a Tesseract
             baseApi.setImage(bitmap);          	
             result = baseApi.getUTF8Text().replace("\n", "");
-            confidence = baseApi.meanConfidence();        		
+            confidence = baseApi.meanConfidence();
         }
-		Log.d(TAG,"NEW - confidence: "+confidence+" - OCR:"+result);
+        bitmap.recycle();
+        bitmap=null;
         return new OcrRect(roi,result,confidence);
     }
     
@@ -1142,7 +1848,7 @@ public class ImageOcrActivity extends Activity{
 
 		System.out.println("Uploading..");
 		Task task = restClient.processTextFieldByBitmap(bitmap, settings);
-
+		
 		return waitAndDownloadResult(task);
 	}
 
@@ -1226,6 +1932,36 @@ public class ImageOcrActivity extends Activity{
 		}
 		
 		return result;
-	}	
+	}
+	
+	private Bitmap getEnlargedCroppedBitmap(Mat image, Rect roi, int count, String prefix, boolean enlarge)
+	{
+		Mat cropped = new Mat(image,roi);		                    
+        Bitmap bitmap = Bitmap.createBitmap(cropped.cols(), cropped.rows(), Bitmap.Config.ARGB_8888);
+        if (enlarge)
+        {
+            Utils.matToBitmap(cropped, bitmap);
+            Bitmap enlargedBitmap = Bitmap.createBitmap(cropped.cols()+50, cropped.rows()+50, Bitmap.Config.ARGB_8888);		                    
+            Canvas wideBmpCanvas = new Canvas(enlargedBitmap);
+            wideBmpCanvas.drawColor(Color.WHITE);
+            wideBmpCanvas.drawBitmap(bitmap, 25, 25, null);
+            Mat new_bitmap = new Mat();
+            Utils.bitmapToMat(enlargedBitmap, new_bitmap);
+            //if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/"+prefix+"_cropped_"+(count++)+".jpg", new_bitmap);
+            cropped.release();
+    		cropped = null;
+    		bitmap.recycle();
+    		bitmap = null;
+    		return enlargedBitmap;		
+        }
+        else
+        {
+        	Utils.matToBitmap(cropped, bitmap);
+            cropped.release();
+    		cropped = null;
+            //if (DEBUG) Imgcodecs.imwrite(getTempDirectoryPath()+"/"+prefix+"_cropped_"+(count++)+".jpg", cropped);
+    		return bitmap;		
+        }
+	}
 } 
 

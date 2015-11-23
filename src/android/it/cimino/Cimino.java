@@ -1,7 +1,10 @@
 package it.cimino;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -16,7 +19,7 @@ import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaPlugin;
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaWebView;
-import org.apache.cordova.camera.FileHelper;
+//import org.apache.cordova.camera.FileHelper;
 import org.apache.cordova.PluginResult;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -27,6 +30,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Log;
@@ -48,6 +52,8 @@ public class Cimino extends CordovaPlugin {
     private static final Pattern NONLATIN = Pattern.compile("[^\\w-]");
     private static final Pattern WHITESPACE = Pattern.compile("[\\s]");
 
+    private static final String LOG_TAG = "Cimino";
+    
     public static String toSlug(String input) {
       String nowhitespace = WHITESPACE.matcher(input).replaceAll("-");
       String normalized = Normalizer.normalize(nowhitespace, Form.NFD);
@@ -113,6 +119,172 @@ public class Cimino extends CordovaPlugin {
     	        callbackContext.sendPluginResult(r);
     	    }        	
             return true;
+        }
+        if (action.equals("recoverSession"))
+        {
+        	File s = new File(getFileDirectoryPath(),"cimino.session");
+        	//Read text from file
+        	StringBuilder text = new StringBuilder();
+
+        	try {
+        	    BufferedReader br = new BufferedReader(new FileReader(s));
+        	    String line;
+
+        	    while ((line = br.readLine()) != null) {
+        	        text.append(line);
+        	        text.append('\n');
+        	    }
+        	    br.close();
+        	    boolean dres = s.delete();
+        	    callbackContext.success(text.toString());
+    	        return true;        		    	
+        	}
+        	catch (IOException e) {
+        	    //You'll need to add proper error handling here
+	    		e.printStackTrace();
+    	        callbackContext.error( "Error : IOException " + e);
+    	        PluginResult r = new PluginResult(PluginResult.Status.ERROR);
+    	        callbackContext.sendPluginResult(r);
+    	        return false;        		    	        		
+        	}
+        }
+        if (action.equals("hasSession"))
+        {
+        	File s = new File(getFileDirectoryPath(),"cimino.session");
+        	//Read text from file
+        	StringBuilder text = new StringBuilder();
+
+        	try {
+        	    BufferedReader br = new BufferedReader(new FileReader(s));
+        	    String line;
+
+        	    while ((line = br.readLine()) != null) {
+        	        text.append(line);
+        	        text.append('\n');
+        	    }
+        	    br.close();
+        	    callbackContext.success(text.toString());
+    	        return true;        		    	
+        	}
+        	catch (FileNotFoundException nfe){
+        		nfe.printStackTrace();
+    	        callbackContext.error( "Error : FileNotFoundException " +nfe);
+    	        PluginResult r = new PluginResult(PluginResult.Status.ERROR);
+    	        callbackContext.sendPluginResult(r);
+        		return false;
+        	}
+        	catch (IOException e) {
+        	    //You'll need to add proper error handling here
+	    		e.printStackTrace();
+    	        callbackContext.error( "Error : IOException " + e);
+    	        PluginResult r = new PluginResult(PluginResult.Status.ERROR);
+    	        callbackContext.sendPluginResult(r);
+    	        return false;        		    	        		
+        	}        	
+        }
+        if (action.equals("recoverResult"))
+        {
+        	File s = new File(getFileDirectoryPath(),"cimino.session.resultjson");
+        	//Read text from file
+        	StringBuilder text = new StringBuilder();
+
+        	try {
+        	    BufferedReader br = new BufferedReader(new FileReader(s));
+        	    String line;
+
+        	    while ((line = br.readLine()) != null) {
+        	        text.append(line);
+        	        text.append('\n');
+        	    }
+        	    br.close();
+        	    boolean dres = s.delete();
+        	    callbackContext.success(text.toString());
+    	        return true;        		    	
+        	}
+        	catch (FileNotFoundException nfe){
+        		nfe.printStackTrace();
+    	        callbackContext.error( "Error : FileNotFoundException " +nfe);
+    	        PluginResult r = new PluginResult(PluginResult.Status.ERROR);
+    	        callbackContext.sendPluginResult(r);
+        		return false;
+        	}	        	
+        	catch (IOException e) {
+        	    //You'll need to add proper error handling here
+	    		e.printStackTrace();
+    	        callbackContext.error( "Error : IOException " + e);
+    	        PluginResult r = new PluginResult(PluginResult.Status.ERROR);
+    	        callbackContext.sendPluginResult(r);
+    	        return false;        		    	        		
+        	}
+        }
+        if (action.equals("hasResult"))
+        {
+        	File s = new File(getFileDirectoryPath(),"cimino.session.resultjson");
+        	//Read text from file
+        	StringBuilder text = new StringBuilder();
+
+        	try {
+        	    BufferedReader br = new BufferedReader(new FileReader(s));
+        	    String line;
+
+        	    while ((line = br.readLine()) != null) {
+        	        text.append(line);
+        	        text.append('\n');
+        	    }
+        	    br.close();
+        	    callbackContext.success(text.toString());
+    	        return true;        		    	
+        	}
+        	catch (FileNotFoundException nfe){
+        		nfe.printStackTrace();
+    	        callbackContext.error( "Error : FileNotFoundException " +nfe);
+    	        PluginResult r = new PluginResult(PluginResult.Status.ERROR);
+    	        callbackContext.sendPluginResult(r);
+        		return false;
+        	}
+        	catch (IOException e) {
+        	    //You'll need to add proper error handling here
+	    		e.printStackTrace();
+    	        callbackContext.error( "Error : IOException " + e);
+    	        PluginResult r = new PluginResult(PluginResult.Status.ERROR);
+    	        callbackContext.sendPluginResult(r);
+    	        return false;        		    	        		
+        	}
+        }
+        if (action.equals("clearResult"))
+        {
+    		String message = "OK";
+    		File s = new File(getFileDirectoryPath(),"cimino.session.resultjson");
+    		if (!s.delete())
+    		{
+    			message = "unable to delete cimino.session.resultjson";
+    			Log.d(TAG,message);
+    		}
+    		s = new File(getFileDirectoryPath(),"cimino.session");
+    		if(!s.delete())
+    		{
+    			message = "unable to delete cimino.session";
+    			Log.d(TAG,message);
+    		}
+    	    callbackContext.success(message);  		
+        }
+        if (action.equals("getSessionDocumentID")){
+        	String document_id = this.getSessionDocumentID();
+        	
+        	if (document_id.equals("0"))
+        	{
+        	    callbackContext.success(document_id);
+    	        return true;        		    	
+        	}
+        	else
+        	{
+        		callbackContext.error( "Error : Document ID is missing!");
+    	        PluginResult r = new PluginResult(PluginResult.Status.ERROR);
+    	        callbackContext.sendPluginResult(r);
+        		return false;
+        		
+        	}
+
         }
         if (action.equals("init"))
         {
@@ -224,6 +396,32 @@ public class Cimino extends CordovaPlugin {
     //--------------------------------------------------------------------------
     // LOCAL METHODS
     //--------------------------------------------------------------------------
+    
+    private String getSessionDocumentID()
+    {
+    	File s = new File(getFileDirectoryPath(),"cimino.session.documentID");
+    	//Read text from file
+    	StringBuilder text = new StringBuilder();
+
+    	try {
+    	    BufferedReader br = new BufferedReader(new FileReader(s));
+    	    String line;
+
+    	    while ((line = br.readLine()) != null) {
+    	        text.append(line);
+    	        text.append('\n');
+    	    }
+    	    br.close();
+	        return text.toString();
+    	}
+    	catch (FileNotFoundException nfe){
+    		return "0";
+    	}
+    	catch (IOException e) {
+	        return "0";        		    	        		
+    	}
+    }
+    
     private String getTempDirectoryPath() 
     {
         File cache = null;
@@ -298,13 +496,23 @@ public class Cimino extends CordovaPlugin {
 //        Intent intent = new Intent(context, ImageOcrActivity.class);
         try
 		{
+            File s = new File(getFileDirectoryPath(),"cimino.session.documentID");
+            FileOutputStream outputStream;
+
+            try {
+              outputStream = new FileOutputStream(s);
+              outputStream.write(data.getInt("document_id"));
+              outputStream.close();
+            } catch (Exception e) {
+              e.printStackTrace();
+            }
+            
 			intent.putExtra("rows", data.getInt("rows") );
 			intent.putExtra("extra_fields",data.getJSONArray("extra_fields").toString());
         	intent.putExtra("filepath", data.getString("filepath"));
 		}
 		catch (JSONException e)
 		{
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
         
@@ -322,15 +530,16 @@ public class Cimino extends CordovaPlugin {
         try
 		{
         	intent.putExtra("filepath", data.getString("filepath"));
+        	//intent.putExtra("contextCallback", new Parcelable)
 		}
 		catch (JSONException e)
 		{
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
         
         cordova.startActivityForResult((CordovaPlugin) this, intent, 0 );
-    }    
+    }  
+    
     /**
      * Called when the camera view exits.
      *
@@ -351,8 +560,11 @@ public class Cimino extends CordovaPlugin {
 			e.printStackTrace();
 		}
     }    
-
- 
+    
+    public void onRestoreInstanceState(Bundle state, CallbackContext callbackContext) {
+    	Log.d(LOG_TAG,"onRestoreInstanceState");
+    	this.callbackContext = callbackContext;
+    }  
     /**
      * Creates a cursor that can be used to determine how many images we have.
      *
@@ -420,10 +632,9 @@ public class Cimino extends CordovaPlugin {
             // Cleans up after picture taking. Checking for duplicates and that kind of stuff.
 
             // Clean up initial camera-written image file.
-            (new File(FileHelper.stripFileProtocol(this.imageUri.toString()))).delete();
+            //(new File(FileHelper.stripFileProtocol(this.imageUri.toString()))).delete();
 
             checkForDuplicateImage(FILE_URI);
-
 
         	JSONObject json = new JSONObject();
             try
@@ -432,17 +643,28 @@ public class Cimino extends CordovaPlugin {
 	            json.put("headerFile", intent.getExtras().get("headerFile").toString());
 	            json.put("realSizePixelRatio", intent.getExtras().get("realSizePixelRatio").toString());
 				json.put("productRows", intent.getExtras().get("productRows").toString());
+							    
+	            // qui salvo il json in formato stringa
+	            String json_string = json.toString();
+	            File s = new File(getFileDirectoryPath(),"cimino.session.resultjson");
+	            FileOutputStream outputStream;
+
+	            try {
+	              outputStream = new FileOutputStream(s);
+	              outputStream.write(json_string.getBytes());
+	              outputStream.close();
+	            } catch (Exception e) {
+	              e.printStackTrace();
+	            }
+	            
 	            this.callbackContext.success(json);
 	                   	
 			}
 			catch (JSONException e)
 			{
-				// TODO Auto-generated catch block
 				e.printStackTrace();
-
 	        	json = null; 
-			}
-            
+			}            
         }
         else
         {
@@ -458,5 +680,7 @@ public class Cimino extends CordovaPlugin {
 	public void failPicture(String err) {
 	    this.callbackContext.error(err);
 	}
+	
+	
 
 }

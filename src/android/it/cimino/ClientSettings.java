@@ -7,9 +7,9 @@ package it.cimino;
  */
 public class ClientSettings {
 	// Name of application you created
-	public static final String APPLICATION_ID = "Ciminotrack";
+	public static final String APPLICATION_ID = "Cimino-Track";
 	// Password should be sent to your e-mail after application was created
-	public static final String PASSWORD = "rarsXF2lP6cerR1TwK3FqDf0";
+	public static final String PASSWORD = "slGJwZJ5hIgb7OZe/HGSAwuG";
 	
 	public static void setupProxy()
 	{
